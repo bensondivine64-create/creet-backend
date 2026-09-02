@@ -1,0 +1,6 @@
+flask
+flask-cors
+sqlalchemy==1.4.49
+pyjwt
+python-dotenv
+requests
