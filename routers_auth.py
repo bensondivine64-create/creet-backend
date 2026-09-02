@@ -27,6 +27,11 @@ def make_unique_username(db, base: str) -> str:
     return candidate
 
 
+def is_primary_admin_email(email: str) -> bool:
+    primary_admin_email = os.getenv("PRIMARY_ADMIN_EMAIL", "").strip().lower()
+    return bool(primary_admin_email) and email == primary_admin_email
+
+
 @auth_bp.post("/signup")
 def signup():
     data = request.get_json(force=True) or {}
@@ -57,22 +62,22 @@ def signup():
         if db.query(models.User).filter(models.User.username == username).first():
             return jsonify({"detail": "That username is taken"}), 409
 
-        primary_admin_email = os.getenv("PRIMARY_ADMIN_EMAIL", "").strip().lower()
-        is_primary_admin = email == primary_admin_email
+        is_admin = is_primary_admin_email(email)
 
         user = models.User(
             username=username,
             email=email,
             password_hash=hash_password(password),
             full_name=full_name,
-            role="admin" if is_primary_admin else role,
-            is_verified=is_primary_admin,
+            role=role,
+            is_admin=is_admin,
+            is_verified=is_admin,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
 
-        if not is_primary_admin:
+        if not is_admin:
             code = generate_otp()
             otp = models.OtpCode(
                 email=email,
@@ -148,16 +153,15 @@ def google_login():
             if role not in VALID_SIGNUP_ROLES:
                 return jsonify({"detail": "Choose an account type to continue"}), 400
 
-            primary_admin_email = os.getenv("PRIMARY_ADMIN_EMAIL", "").strip().lower()
-            is_primary_admin = email == primary_admin_email
-
+            is_admin = is_primary_admin_email(email)
             username = make_unique_username(db, email.split("@")[0])
             user = models.User(
                 username=username,
                 email=email,
                 password_hash=hash_password(secrets.token_urlsafe(32)),
                 full_name=info["full_name"],
-                role="admin" if is_primary_admin else role,
+                role=role,
+                is_admin=is_admin,
                 is_verified=True,
             )
             db.add(user)
