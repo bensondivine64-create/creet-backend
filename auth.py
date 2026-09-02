@@ -80,3 +80,16 @@ def require_auth(fn):
             db.close()
 
     return wrapper
+
+
+def require_admin(fn):
+    from functools import wraps
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        from flask import jsonify
+        if not getattr(g, "current_user", None) or not g.current_user.is_admin:
+            return jsonify({"detail": "Admin access required"}), 403
+        return fn(*args, **kwargs)
+
+    return wrapper

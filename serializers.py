@@ -5,6 +5,7 @@ def user_to_dict(user):
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
+        "is_admin": bool(user.is_admin),
         "is_verified": bool(user.is_verified),
         "is_premium": bool(user.is_premium),
         "avatar": user.avatar,

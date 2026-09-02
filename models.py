@@ -11,7 +11,8 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False)  # buyer | freelancer | vendor | admin
+    role = Column(String(20), nullable=False)  # buyer | freelancer | vendor
+    is_admin = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
     is_premium = Column(Boolean, default=False)
     premium_expires = Column(DateTime, nullable=True)
