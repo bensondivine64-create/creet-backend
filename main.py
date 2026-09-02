@@ -8,7 +8,7 @@ from routers_auth import auth_bp
 Base.metadata.create_all(bind=engine)
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://localhost:3001", "https://creet.name.ng"])
+CORS(app, origins=["http://localhost:3000", "http://localhost:3001", "https://creet.name.ng", "https://creet.vercel.app"])
 
 app.register_blueprint(auth_bp)
 
