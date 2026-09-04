@@ -1,3 +1,5 @@
+import os
+import uuid
 from flask import Blueprint, request, jsonify, g
 
 from database import SessionLocal
@@ -84,3 +86,35 @@ def get_public_profile(username):
         })
     finally:
         db.close()
+
+
+ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+AVATAR_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads", "avatars")
+
+
+def _allowed_avatar(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_AVATAR_EXTENSIONS
+
+
+@profile_bp.post("/avatar")
+@require_auth
+def upload_avatar():
+    db = g.db
+    user = g.current_user
+
+    f = request.files.get("avatar")
+    if not f or not f.filename:
+        return jsonify({"detail": "No image provided"}), 422
+    if not _allowed_avatar(f.filename):
+        return jsonify({"detail": "Allowed formats: jpg, jpeg, png, webp"}), 422
+
+    os.makedirs(AVATAR_UPLOAD_DIR, exist_ok=True)
+    ext = f.filename.rsplit(".", 1)[1].lower()
+    unique_name = f"{uuid.uuid4().hex}.{ext}"
+    f.save(os.path.join(AVATAR_UPLOAD_DIR, unique_name))
+
+    user.avatar = f"/static/uploads/avatars/{unique_name}"
+    db.commit()
+    db.refresh(user)
+
+    return jsonify(user_to_dict(user))
