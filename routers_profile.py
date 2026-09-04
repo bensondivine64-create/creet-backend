@@ -106,12 +106,8 @@ def upload_avatar():
     if not _allowed_avatar(f.filename):
         return jsonify({"detail": "Allowed formats: jpg, jpeg, png, webp"}), 422
 
-    try:
-        user.avatar = upload_image(f, folder="creet/avatars")
-        db.commit()
-        db.refresh(user)
-        return jsonify(user_to_dict(user))
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"detail": f"DEBUG: {type(e).__name__}: {str(e)}"}), 500
+    user.avatar = upload_image(f, folder="creet/avatars")
+    db.commit()
+    db.refresh(user)
+
+    return jsonify(user_to_dict(user))
