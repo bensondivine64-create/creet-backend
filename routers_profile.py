@@ -111,3 +111,36 @@ def upload_avatar():
     db.refresh(user)
 
     return jsonify(user_to_dict(user))
+
+
+@profile_bp.get("/directory/<string:role>")
+def get_profile_directory(role):
+    if role not in ("freelancer", "vendor", "buyer"):
+        return jsonify({"detail": "Invalid role"}), 422
+
+    limit = min(int(request.args.get("limit", 10)), 30)
+
+    db = SessionLocal()
+    try:
+        users = (
+            db.query(models.User)
+            .filter(models.User.role == role, models.User.profile_completed == True)  # noqa: E712
+            .order_by(models.User.is_verified.desc(), models.User.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return jsonify({
+            "profiles": [
+                {
+                    "username": u.username,
+                    "full_name": u.full_name,
+                    "avatar": u.avatar,
+                    "bio": u.bio,
+                    "location": u.location,
+                    "is_verified": bool(u.is_verified),
+                }
+                for u in users
+            ]
+        })
+    finally:
+        db.close()
