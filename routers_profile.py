@@ -2,8 +2,7 @@ from flask import Blueprint, request, jsonify, g
 
 from database import SessionLocal
 from auth import require_auth
-from serializers import user_to_dict
-import models, listing_to_dict
+from serializers import user_to_dict, listing_to_dict
 import models
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
