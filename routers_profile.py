@@ -4,6 +4,7 @@ from database import SessionLocal
 from auth import require_auth
 from serializers import user_to_dict, listing_to_dict
 import models
+import traceback
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
 
@@ -51,6 +52,11 @@ def update_profile():
         db.refresh(user)
 
         return jsonify(user_to_dict(user))
+    except Exception as e:
+        db.rollback()
+        print("=== PROFILE UPDATE ERROR ===")
+        traceback.print_exc()
+        return jsonify({"detail": f"DEBUG: {type(e).__name__}: {str(e)}"}), 500
     finally:
         db.close()
 
