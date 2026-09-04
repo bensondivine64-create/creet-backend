@@ -1,7 +1,6 @@
-import os
-import uuid
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
+from cloud_storage import upload_image
 
 import models
 from database import SessionLocal
@@ -145,7 +144,6 @@ def create_request():
 
 
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads", "listings")
 
 
 def _allowed_file(filename):
@@ -159,15 +157,11 @@ def upload_images():
     if not files:
         return jsonify({"detail": "No images provided"}), 422
 
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
     urls = []
     for f in files[:6]:
         if not f or not f.filename or not _allowed_file(f.filename):
             continue
-        ext = f.filename.rsplit(".", 1)[1].lower()
-        unique_name = f"{uuid.uuid4().hex}.{ext}"
-        f.save(os.path.join(UPLOAD_DIR, unique_name))
-        urls.append(f"/static/uploads/listings/{unique_name}")
+        urls.append(upload_image(f, folder="creet/listings"))
 
     if not urls:
         return jsonify({"detail": "No valid images (allowed: jpg, jpeg, png, webp)"}), 422
