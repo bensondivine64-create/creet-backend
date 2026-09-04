@@ -4,7 +4,6 @@ from database import SessionLocal
 from auth import require_auth
 from serializers import user_to_dict, listing_to_dict
 import models
-import traceback
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
 
@@ -13,11 +12,10 @@ profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
 @require_auth
 def update_profile():
     data = request.get_json(force=True) or {}
+    db = g.db
+    user = g.current_user
 
-    db = SessionLocal()
     try:
-        user = g.current_user
-
         if "full_name" in data:
             full_name = (data["full_name"] or "").strip()[:255]
             if not full_name:
@@ -47,18 +45,13 @@ def update_profile():
 
         user.profile_completed = True
 
-        db.merge(user)
         db.commit()
         db.refresh(user)
 
         return jsonify(user_to_dict(user))
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print("=== PROFILE UPDATE ERROR ===")
-        traceback.print_exc()
-        return jsonify({"detail": f"DEBUG: {type(e).__name__}: {str(e)}"}), 500
-    finally:
-        db.close()
+        raise
 
 
 @profile_bp.get("/<string:username>")
