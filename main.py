@@ -6,7 +6,6 @@ import models
 from routers_auth import auth_bp
 from routers_listings import listings_bp
 from routers_profile import profile_bp
-from routers_sellers import sellers_bp
 
 Base.metadata.create_all(bind=engine)
 
@@ -16,7 +15,6 @@ CORS(app, origins=["http://localhost:3000", "http://localhost:3001", "https://cr
 app.register_blueprint(auth_bp)
 app.register_blueprint(listings_bp)
 app.register_blueprint(profile_bp)
-app.register_blueprint(sellers_bp)
 
 
 @app.get("/api/health")
