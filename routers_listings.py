@@ -1,3 +1,5 @@
+import os
+import uuid
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
@@ -88,6 +90,11 @@ def _create_listing(kind, required_fields):
             if field not in data or data[field] in (None, ""):
                 return jsonify({"detail": f"{field} is required"}), 422
 
+        images = data.get("images", [])
+        if not isinstance(images, list):
+            images = []
+        images = [str(u) for u in images if isinstance(u, str)][:6]
+
         listing = models.Listing(
             seller_id=g.current_user.id,
             kind=kind,
@@ -96,7 +103,7 @@ def _create_listing(kind, required_fields):
             category=data["category"],
             price=data.get("price", 0),
             currency="NGN",
-            images=[],
+            images=images,
         )
         if kind == "gig":
             listing.delivery_days = data.get("delivery_days", 1)
@@ -135,3 +142,34 @@ def create_product():
 @require_auth
 def create_request():
     return _create_listing("request", ["title", "description", "category"])
+
+
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads", "listings")
+
+
+def _allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
+
+
+@listings_bp.post("/upload-images")
+@require_auth
+def upload_images():
+    files = request.files.getlist("images")
+    if not files:
+        return jsonify({"detail": "No images provided"}), 422
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    urls = []
+    for f in files[:6]:
+        if not f or not f.filename or not _allowed_file(f.filename):
+            continue
+        ext = f.filename.rsplit(".", 1)[1].lower()
+        unique_name = f"{uuid.uuid4().hex}.{ext}"
+        f.save(os.path.join(UPLOAD_DIR, unique_name))
+        urls.append(f"/static/uploads/listings/{unique_name}")
+
+    if not urls:
+        return jsonify({"detail": "No valid images (allowed: jpg, jpeg, png, webp)"}), 422
+
+    return jsonify({"urls": urls})

@@ -2,7 +2,8 @@ from flask import Blueprint, request, jsonify, g
 
 from database import SessionLocal
 from auth import require_auth
-from serializers import user_to_dict, listing_to_dict
+from serializers import user_to_dict
+import models, listing_to_dict
 import models
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
@@ -16,6 +17,26 @@ def update_profile():
     db = SessionLocal()
     try:
         user = g.current_user
+
+        if "full_name" in data:
+            full_name = (data["full_name"] or "").strip()[:255]
+            if not full_name:
+                return jsonify({"detail": "Full name can't be empty"}), 422
+            user.full_name = full_name
+
+        if "username" in data:
+            new_username = (data["username"] or "").strip().lower()[:50]
+            if len(new_username) < 3:
+                return jsonify({"detail": "Username must be at least 3 characters"}), 422
+            if new_username != user.username:
+                exists = (
+                    db.query(models.User)
+                    .filter(models.User.username == new_username, models.User.id != user.id)
+                    .first()
+                )
+                if exists:
+                    return jsonify({"detail": "That username is taken"}), 409
+                user.username = new_username
 
         if "bio" in data:
             user.bio = (data["bio"] or "").strip()[:1000]

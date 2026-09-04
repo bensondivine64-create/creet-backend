@@ -10,6 +10,7 @@ from routers_profile import profile_bp
 Base.metadata.create_all(bind=engine)
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB upload cap
 CORS(app, origins=["http://localhost:3000", "http://localhost:3001", "https://creet.name.ng"])
 
 app.register_blueprint(auth_bp)
