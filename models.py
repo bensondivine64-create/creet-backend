@@ -26,6 +26,18 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class Ad(Base):
+    __tablename__ = "ads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    image_url = Column(String(500), nullable=False)
+    link_url = Column(String(500), nullable=True)
+    position = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class OtpCode(Base):
     __tablename__ = "otp_codes"
 
