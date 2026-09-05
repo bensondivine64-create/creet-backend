@@ -57,6 +57,7 @@ class Listing(Base):
     rating_avg = Column(Numeric(3, 2), default=0)
     rating_count = Column(Integer, default=0)
     status = Column(String(10), default="active")
+    sold_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 

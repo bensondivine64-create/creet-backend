@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, g
 from cloud_storage import upload_image
 
@@ -10,6 +10,7 @@ from serializers import listing_to_dict
 listings_bp = Blueprint("listings", __name__, url_prefix="/api/listings")
 
 ROLE_FOR_KIND = {"gig": "freelancer", "product": "vendor", "request": "buyer"}
+EDITABLE_KINDS = {"product", "request"}
 
 
 @listings_bp.get("")
@@ -22,8 +23,12 @@ def get_listings():
 
     db = SessionLocal()
     try:
+        cutoff = datetime.utcnow() - timedelta(days=6)
         query = db.query(models.Listing).filter(
             models.Listing.kind == kind, models.Listing.status == "active"
+        )
+        query = query.filter(
+            (models.Listing.sold_at.is_(None)) | (models.Listing.sold_at > cutoff)
         )
         if search:
             like = f"%{search}%"
@@ -141,6 +146,88 @@ def create_product():
 @require_auth
 def create_request():
     return _create_listing("request", ["title", "description", "category"])
+
+
+def _get_owned_listing(db, listing_id):
+    listing = db.query(models.Listing).filter(models.Listing.id == listing_id).first()
+    if not listing:
+        return None, jsonify({"detail": "This listing doesn't exist"}), 404
+    if listing.kind not in EDITABLE_KINDS:
+        return None, jsonify({"detail": "This listing type can't be edited here"}), 403
+    if listing.seller_id != g.current_user.id:
+        return None, jsonify({"detail": "You don't own this listing"}), 403
+    return listing, None, None
+
+
+@listings_bp.put("/<int:listing_id>")
+@require_auth
+def update_listing(listing_id):
+    db = g.db
+    listing, err_resp, err_code = _get_owned_listing(db, listing_id)
+    if listing is None:
+        return err_resp, err_code
+
+    data = request.get_json(force=True) or {}
+
+    if "title" in data and data["title"]:
+        listing.title = data["title"][:255]
+    if "description" in data and data["description"]:
+        listing.description = data["description"]
+    if "category" in data and data["category"]:
+        listing.category = data["category"]
+    if "price" in data:
+        listing.price = data.get("price", 0)
+    if "images" in data and isinstance(data["images"], list):
+        listing.images = [str(u) for u in data["images"] if isinstance(u, str)][:6]
+
+    if listing.kind == "product":
+        if "condition" in data:
+            listing.condition_status = data["condition"]
+        if "stock" in data:
+            listing.stock = data.get("stock", 0)
+    elif listing.kind == "request":
+        if "deadline" in data:
+            deadline_str = data.get("deadline")
+            if deadline_str:
+                try:
+                    listing.deadline = datetime.fromisoformat(deadline_str)
+                except ValueError:
+                    pass
+            else:
+                listing.deadline = None
+
+    db.commit()
+    db.refresh(listing)
+    return jsonify(listing_to_dict(listing, g.current_user))
+
+
+@listings_bp.delete("/<int:listing_id>")
+@require_auth
+def delete_listing(listing_id):
+    db = g.db
+    listing, err_resp, err_code = _get_owned_listing(db, listing_id)
+    if listing is None:
+        return err_resp, err_code
+
+    db.delete(listing)
+    db.commit()
+    return jsonify({"success": True})
+
+
+@listings_bp.post("/<int:listing_id>/mark-sold")
+@require_auth
+def mark_sold(listing_id):
+    db = g.db
+    listing, err_resp, err_code = _get_owned_listing(db, listing_id)
+    if listing is None:
+        return err_resp, err_code
+    if listing.kind != "product":
+        return jsonify({"detail": "Only products can be marked as sold"}), 422
+
+    listing.sold_at = datetime.utcnow()
+    db.commit()
+    db.refresh(listing)
+    return jsonify(listing_to_dict(listing, g.current_user))
 
 
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
