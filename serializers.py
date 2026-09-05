@@ -42,6 +42,7 @@ def listing_to_dict(listing, seller):
     elif listing.kind == "product":
         d["condition"] = listing.condition_status
         d["stock"] = listing.stock
+        d["sold_at"] = listing.sold_at.isoformat() if listing.sold_at else None
     elif listing.kind == "request":
         d["deadline"] = listing.deadline.isoformat() if listing.deadline else None
     return d

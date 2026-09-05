@@ -10,7 +10,7 @@ from serializers import listing_to_dict
 listings_bp = Blueprint("listings", __name__, url_prefix="/api/listings")
 
 ROLE_FOR_KIND = {"gig": "freelancer", "product": "vendor", "request": "buyer"}
-EDITABLE_KINDS = {"product", "request"}
+EDITABLE_KINDS = {"product", "request", "gig"}
 
 
 @listings_bp.get("")
@@ -180,7 +180,10 @@ def update_listing(listing_id):
     if "images" in data and isinstance(data["images"], list):
         listing.images = [str(u) for u in data["images"] if isinstance(u, str)][:6]
 
-    if listing.kind == "product":
+    if listing.kind == "gig":
+        if "delivery_days" in data:
+            listing.delivery_days = data.get("delivery_days", 1)
+    elif listing.kind == "product":
         if "condition" in data:
             listing.condition_status = data["condition"]
         if "stock" in data:
