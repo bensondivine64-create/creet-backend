@@ -71,6 +71,7 @@ def get_public_profile(username):
         )
 
         return jsonify({
+            "id": user.id,
             "username": user.username,
             "full_name": user.full_name,
             "role": user.role,
