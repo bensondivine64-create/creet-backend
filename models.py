@@ -27,6 +27,20 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class AdminAiLog(Base):
+    __tablename__ = "admin_ai_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    command = Column(Text, nullable=False)
+    ai_raw_response = Column(Text, nullable=True)
+    action_taken = Column(String(50), nullable=True)
+    target_id = Column(Integer, nullable=True)
+    success = Column(Boolean, default=False)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class OtpCode(Base):
     __tablename__ = "otp_codes"
 
