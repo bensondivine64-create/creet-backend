@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, g, request
-from serializers import user_to_dict
+from serializers import user_to_dict, listing_to_dict
 
 import models
 from auth import require_auth, require_admin
@@ -167,3 +167,44 @@ def remove_admin(user_id):
     if user_id == g.current_user.id:
         return jsonify({"detail": "You can't remove your own admin status"}), 400
     return _toggle_field(user_id, "is_admin", False)
+
+
+@admin_bp.get("/listings")
+@require_auth
+@require_admin
+def list_listings_admin():
+    db = g.db
+    search = request.args.get("search", "").strip()
+    kind = request.args.get("kind", "").strip()
+    limit = min(int(request.args.get("limit", 50)), 200)
+    offset = int(request.args.get("offset", 0))
+
+    query = db.query(models.Listing)
+    if search:
+        query = query.filter(models.Listing.title.ilike(f"%{search}%"))
+    if kind:
+        query = query.filter(models.Listing.kind == kind)
+
+    total = query.count()
+    rows = query.order_by(models.Listing.created_at.desc()).offset(offset).limit(limit).all()
+
+    results = []
+    for row in rows:
+        seller = db.query(models.User).filter(models.User.id == row.seller_id).first()
+        if seller:
+            results.append(listing_to_dict(row, seller))
+
+    return jsonify({"listings": results, "total": total})
+
+
+@admin_bp.delete("/listings/<int:listing_id>")
+@require_auth
+@require_admin
+def delete_listing_admin(listing_id):
+    db = g.db
+    listing = db.query(models.Listing).filter(models.Listing.id == listing_id).first()
+    if not listing:
+        return jsonify({"detail": "Listing not found"}), 404
+    db.delete(listing)
+    db.commit()
+    return jsonify({"success": True})
