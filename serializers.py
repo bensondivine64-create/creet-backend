@@ -13,6 +13,7 @@ def user_to_dict(user):
         "location": user.location,
         "categories": user.categories or [],
         "profile_completed": bool(user.profile_completed),
+        "account_status": user.account_status or "active",
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 

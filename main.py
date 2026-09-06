@@ -9,6 +9,7 @@ from routers_profile import profile_bp
 from routers_comments import comments_bp
 from routers_notifications import notifications_bp
 from routers_messages import messages_bp
+from routers_admin import admin_bp
 
 Base.metadata.create_all(bind=engine)
 
@@ -21,6 +22,7 @@ app.register_blueprint(profile_bp)
 app.register_blueprint(comments_bp)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(messages_bp)
+app.register_blueprint(admin_bp)
 
 
 @app.get("/api/health")

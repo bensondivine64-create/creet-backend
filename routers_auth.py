@@ -123,6 +123,9 @@ def login():
         if not user.is_verified:
             return jsonify({"detail": "Account not verified — check your email"}), 403
 
+        if user.account_status == "suspended":
+            return jsonify({"detail": "Your account has been suspended.", "error_code": "account_suspended"}), 403
+
         user.failed_login_attempts = 0
         user.locked_until = None
         db.commit()

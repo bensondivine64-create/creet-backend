@@ -21,20 +21,9 @@ class User(Base):
     location = Column(String(255), nullable=True)
     categories = Column(JSON, default=list)
     profile_completed = Column(Boolean, default=False)
+    account_status = Column(String(20), default="active")  # active | suspended
     failed_login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class Ad(Base):
-    __tablename__ = "ads"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(255), nullable=False)
-    image_url = Column(String(500), nullable=False)
-    link_url = Column(String(500), nullable=True)
-    position = Column(Integer, default=0)
-    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -69,7 +58,6 @@ class Listing(Base):
     rating_avg = Column(Numeric(3, 2), default=0)
     rating_count = Column(Integer, default=0)
     status = Column(String(10), default="active")
-    sold_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -114,3 +102,17 @@ class Message(Base):
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    target_type = Column(String(10), nullable=False)  # listing | user
+    target_id = Column(Integer, nullable=False)
+    reason = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(10), default="pending")  # pending | resolved
+    created_at = Column(DateTime, server_default=func.now())
+    resolved_at = Column(DateTime, nullable=True)

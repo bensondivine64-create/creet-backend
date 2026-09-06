@@ -73,6 +73,8 @@ def require_auth(fn):
             user = db.query(models.User).filter(models.User.id == int(payload["sub"])).first()
             if not user:
                 return jsonify({"detail": "Account not found"}), 401
+            if user.account_status == "suspended":
+                return jsonify({"detail": "Your account has been suspended"}), 403
             g.current_user = user
             g.db = db
             return fn(*args, **kwargs)
@@ -83,11 +85,8 @@ def require_auth(fn):
 
 
 def require_admin(fn):
-    from functools import wraps
-
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        from flask import jsonify
         if not getattr(g, "current_user", None) or not g.current_user.is_admin:
             return jsonify({"detail": "Admin access required"}), 403
         return fn(*args, **kwargs)
