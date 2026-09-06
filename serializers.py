@@ -46,3 +46,30 @@ def listing_to_dict(listing, seller):
     elif listing.kind == "request":
         d["deadline"] = listing.deadline.isoformat() if listing.deadline else None
     return d
+
+
+def comment_to_dict(comment, author):
+    return {
+        "id": comment.id,
+        "listing_id": comment.listing_id,
+        "author": {
+            "username": author.username,
+            "full_name": author.full_name,
+            "avatar": author.avatar,
+            "verified": bool(author.is_verified),
+        },
+        "content": comment.content,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+    }
+
+
+def notification_to_dict(n):
+    return {
+        "id": n.id,
+        "type": n.type,
+        "title": n.title,
+        "body": n.body,
+        "read": bool(n.is_read),
+        "link": n.link,
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+    }
