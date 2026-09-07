@@ -214,6 +214,7 @@ def delete_listing_admin(listing_id):
 
 
 AI_ENDPOINT = "https://curiousapis.name.ng/ai_gpt5"
+SERIOUS_ACTIONS = {"SUSPEND_USER", "DELETE_LISTING"}
 
 SYSTEM_INSTRUCTIONS = """You are CREET's admin assistant. The admin will give you a command in plain English.
 Respond with EXACTLY one line first, in this format, then nothing else on that line:
@@ -297,17 +298,22 @@ def ai_assistant():
     action_taken = None
     success = False
     error = None
-
-    if match:
-        action, target_id_str = match.group(1), match.group(2)
-        target_id = int(target_id_str)
-        if action != "NONE":
-            success, error = _execute_ai_action(db, action, target_id)
-            action_taken = action if success else None
+    pending_action = None
 
     reply_text = ai_text.strip()
     if match:
         reply_text = ai_text.strip()[len(first_line):].strip() or "Done."
+
+    if match:
+        action, target_id_str = match.group(1), match.group(2)
+        target_id = int(target_id_str)
+
+        if action != "NONE" and action in SERIOUS_ACTIONS:
+            pending_action = {"action": action, "target_id": target_id}
+            reply_text = f"This will {action.replace('_', ' ').lower()} (ID {target_id}). Confirm to proceed."
+        elif action != "NONE":
+            success, error = _execute_ai_action(db, action, target_id)
+            action_taken = action if success else None
 
     log = models.AdminAiLog(
         admin_id=g.current_user.id,
@@ -321,7 +327,41 @@ def ai_assistant():
     db.add(log)
     db.commit()
 
-    return jsonify({"reply": reply_text, "action_taken": action_taken, "error": error})
+    return jsonify({
+        "reply": reply_text,
+        "action_taken": action_taken,
+        "error": error,
+        "pending_action": pending_action,
+    })
+
+
+@admin_bp.post("/ai-assistant/confirm")
+@require_auth
+@require_admin
+def confirm_ai_action():
+    db = g.db
+    data = request.get_json(force=True) or {}
+    action = data.get("action", "")
+    target_id = data.get("target_id")
+
+    if action not in SERIOUS_ACTIONS or not target_id:
+        return jsonify({"detail": "Invalid confirmation request"}), 422
+
+    success, error = _execute_ai_action(db, action, int(target_id))
+
+    log = models.AdminAiLog(
+        admin_id=g.current_user.id,
+        command=f"[CONFIRMED] {action}:{target_id}",
+        ai_raw_response=None,
+        action_taken=action if success else None,
+        target_id=int(target_id),
+        success=success,
+        error=error,
+    )
+    db.add(log)
+    db.commit()
+
+    return jsonify({"success": success, "error": error})
 
 
 @admin_bp.get("/ai-assistant/logs")
