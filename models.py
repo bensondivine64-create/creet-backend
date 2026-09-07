@@ -45,6 +45,16 @@ class AdminAiLog(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class SiteSettings(Base):
+    __tablename__ = "site_settings"
+
+    id = Column(Integer, primary_key=True)
+    maintenance_mode = Column(Boolean, default=False)
+    banner_active = Column(Boolean, default=False)
+    banner_text = Column(Text, nullable=True)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class OtpCode(Base):
     __tablename__ = "otp_codes"
 

@@ -11,6 +11,7 @@ from routers_notifications import notifications_bp
 from routers_messages import messages_bp
 from routers_admin import admin_bp
 from routers_reports import reports_bp
+from routers_settings import settings_bp
 
 Base.metadata.create_all(bind=engine)
 
@@ -25,6 +26,7 @@ app.register_blueprint(notifications_bp)
 app.register_blueprint(messages_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(reports_bp)
+app.register_blueprint(settings_bp)
 
 
 @app.get("/api/health")

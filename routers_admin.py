@@ -214,7 +214,7 @@ def delete_listing_admin(listing_id):
 
 
 AI_ENDPOINT = "https://curiousapis.name.ng/ai_gpt5"
-SERIOUS_ACTIONS = {"SUSPEND_USER", "DELETE_LISTING", "MAKE_ADMIN"}
+SERIOUS_ACTIONS = {"SUSPEND_USER", "DELETE_LISTING", "MAKE_ADMIN", "SET_MAINTENANCE", "ANNOUNCE"}
 
 SYSTEM_INSTRUCTIONS = """You are CREET's admin assistant, helping the admin manage the platform (users, listings, reports).
 
@@ -222,16 +222,21 @@ If the admin's message is casual conversation, a greeting, a question, or anythi
 (e.g. "hey", "hi", "how are you", "what can you do", "how many users do we have") \
 just reply naturally and conversationally. Do NOT include any ACTION line for these.
 
-Only when the admin is clearly asking you to perform a specific action with a specific numeric ID, respond with EXACTLY one line \
+Only when the admin is clearly asking you to perform a specific action, respond with EXACTLY one line \
 FIRST, in this format, then your explanation on the next line:
-ACTION:<SUSPEND_USER|ACTIVATE_USER|VERIFY_USER|UNVERIFY_USER|MAKE_ADMIN|REMOVE_ADMIN|DELETE_LISTING|RESOLVE_REPORT>:<numeric_id>
+ACTION:<SUSPEND_USER|ACTIVATE_USER|VERIFY_USER|UNVERIFY_USER|MAKE_ADMIN|REMOVE_ADMIN|DELETE_LISTING|RESOLVE_REPORT|SET_MAINTENANCE|ANNOUNCE>:<param>
 
-If they seem to want an action but didn't give a clear numeric ID, just ask them for it in plain conversational text — don't use the ACTION line.
+For most actions, <param> is the numeric target ID.
+For SET_MAINTENANCE, <param> is 1 to turn maintenance mode ON or 0 to turn it OFF.
+For ANNOUNCE, <param> is 0=all users, 1=buyers only, 2=freelancers only, 3=vendors only \
+— and you MUST add a second line: MESSAGE:<the announcement text, taken from what the admin asked to announce>
+
+If they seem to want an action but didn't give enough info (e.g. no ID, no announcement text), just ask them for it in plain conversational text — don't use the ACTION line.
 
 Admin message: """
 
 
-def _execute_ai_action(db, action, target_id):
+def _execute_ai_action(db, action, target_id, message=None):
     if action == "SUSPEND_USER":
         user = db.query(models.User).filter(models.User.id == target_id).first()
         if not user:
@@ -300,6 +305,28 @@ def _execute_ai_action(db, action, target_id):
         report.resolved_at = datetime.utcnow()
         db.commit()
         return True, None
+    if action == "SET_MAINTENANCE":
+        from routers_settings import _get_settings
+        settings = _get_settings(db)
+        settings.maintenance_mode = bool(target_id)
+        db.commit()
+        return True, None
+    if action == "ANNOUNCE":
+        if not message:
+            return False, "No announcement message provided"
+        from routers_settings import _get_settings
+        role_by_index = {0: None, 1: "buyer", 2: "freelancer", 3: "vendor"}
+        role = role_by_index.get(target_id)
+        query = db.query(models.User)
+        if role:
+            query = query.filter(models.User.role == role)
+        for u in query.all():
+            db.add(models.Notification(user_id=u.id, type="announcement", title="Announcement", body=message))
+        settings = _get_settings(db)
+        settings.banner_active = True
+        settings.banner_text = message
+        db.commit()
+        return True, None
     return False, None
 
 
@@ -329,13 +356,15 @@ def ai_assistant():
         db.commit()
         return jsonify({"reply": "Sorry, I couldn't reach the AI service right now.", "action_taken": None}), 502
 
-    first_line = ai_text.strip().split("\n")[0].strip()
+    lines = ai_text.strip().split("\n")
+    first_line = lines[0].strip()
     match = re.match(r"ACTION:([A-Z_]+):(\d+)", first_line)
 
     action_taken = None
     success = False
     error = None
     pending_action = None
+    announce_message = None
 
     reply_text = ai_text.strip()
     if match:
@@ -345,11 +374,23 @@ def ai_assistant():
         action, target_id_str = match.group(1), match.group(2)
         target_id = int(target_id_str)
 
+        if action == "ANNOUNCE":
+            for line in lines[1:]:
+                m2 = re.match(r"MESSAGE:(.*)", line.strip())
+                if m2:
+                    announce_message = m2.group(1).strip()
+                    break
+
         if action != "NONE" and action in SERIOUS_ACTIONS:
-            pending_action = {"action": action, "target_id": target_id}
-            reply_text = f"This will {action.replace('_', ' ').lower()} (ID {target_id}). Confirm to proceed."
+            pending_action = {"action": action, "target_id": target_id, "message": announce_message}
+            if action == "SET_MAINTENANCE":
+                reply_text = f"This will turn maintenance mode {'ON' if target_id else 'OFF'}. Confirm to proceed."
+            elif action == "ANNOUNCE":
+                reply_text = f'This will announce: "{announce_message}". Confirm to proceed.'
+            else:
+                reply_text = f"This will {action.replace('_', ' ').lower()} (ID {target_id}). Confirm to proceed."
         elif action != "NONE":
-            success, error = _execute_ai_action(db, action, target_id)
+            success, error = _execute_ai_action(db, action, target_id, announce_message)
             action_taken = action if success else None
 
     log = models.AdminAiLog(
@@ -380,11 +421,12 @@ def confirm_ai_action():
     data = request.get_json(force=True) or {}
     action = data.get("action", "")
     target_id = data.get("target_id")
+    message = data.get("message")
 
-    if action not in SERIOUS_ACTIONS or not target_id:
+    if action not in SERIOUS_ACTIONS or target_id is None:
         return jsonify({"detail": "Invalid confirmation request"}), 422
 
-    success, error = _execute_ai_action(db, action, int(target_id))
+    success, error = _execute_ai_action(db, action, int(target_id), message)
 
     log = models.AdminAiLog(
         admin_id=g.current_user.id,
