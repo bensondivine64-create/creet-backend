@@ -1,4 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+import re
+import requests
 from flask import Blueprint, request, jsonify, g
 
 import models
@@ -7,6 +9,58 @@ from auth import require_auth, require_admin
 reports_bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 
 VALID_TARGET_TYPES = {"listing", "user"}
+
+
+AI_ENDPOINT = "https://curiousapis.name.ng/ai_gpt5"
+REPEAT_REPORT_THRESHOLD = 3
+
+
+def _apply_suspension(db, user, tier, reason):
+    if user.is_admin:
+        return
+    duration = timedelta(hours=24) if tier == "temporary" else timedelta(days=30)
+    user.account_status = "suspended"
+    user.suspension_type = tier
+    user.suspension_until = datetime.utcnow() + duration
+    user.suspension_reason = reason
+    user.suspension_count = (user.suspension_count or 0) + 1
+
+
+def _ai_judge_severity(reason, description):
+    prompt = (
+        "You are CREET's moderation assistant. A user was reported.\n"
+        f"Reason: {reason}\nDetails: {description or 'none given'}\n"
+        "Respond with EXACTLY one line: SEVERITY:<LOW|HIGH>\n"
+        "HIGH means clear fraud, scam, abuse, or serious harm. LOW means anything else, including vague or unclear reports."
+    )
+    try:
+        resp = requests.get(AI_ENDPOINT, params={"query": prompt}, timeout=15)
+        resp.raise_for_status()
+        text_out = resp.json().get("data", "")
+        match = re.search(r"SEVERITY:(LOW|HIGH)", text_out)
+        return match.group(1) if match else "LOW"
+    except Exception:
+        return "LOW"
+
+
+def _evaluate_target_user(db, target_user_id, reason, description):
+    target_user = db.query(models.User).filter(models.User.id == target_user_id).first()
+    if not target_user or target_user.is_admin or target_user.account_status == "suspended":
+        return
+
+    report_count = (
+        db.query(models.Report)
+        .filter(models.Report.target_type == "user", models.Report.target_id == target_user_id)
+        .count()
+    )
+
+    severity = _ai_judge_severity(reason, description)
+
+    if report_count >= REPEAT_REPORT_THRESHOLD or severity == "HIGH":
+        tier = "serious" if (target_user.suspension_count or 0) >= 1 else "temporary"
+        auto_reason = f"Auto-suspended: {report_count} report(s), AI severity={severity}"
+        _apply_suspension(db, target_user, tier, auto_reason)
+        db.commit()
 
 
 @reports_bp.post("")
@@ -34,6 +88,14 @@ def create_report():
     )
     db.add(report)
     db.commit()
+
+    if target_type == "user":
+        _evaluate_target_user(db, int(target_id), reason, description)
+    elif target_type == "listing":
+        listing = db.query(models.Listing).filter(models.Listing.id == int(target_id)).first()
+        if listing:
+            _evaluate_target_user(db, listing.seller_id, reason, description)
+
     return jsonify({"success": True, "id": report.id})
 
 

@@ -74,7 +74,13 @@ def require_auth(fn):
             if not user:
                 return jsonify({"detail": "Account not found"}), 401
             if user.account_status == "suspended":
-                return jsonify({"detail": "Your account has been suspended"}), 403
+                if user.suspension_until and user.suspension_until <= datetime.utcnow():
+                    user.account_status = "active"
+                    user.suspension_type = None
+                    user.suspension_until = None
+                    db.commit()
+                else:
+                    return jsonify({"detail": "Your account has been suspended"}), 403
             g.current_user = user
             g.db = db
             return fn(*args, **kwargs)
