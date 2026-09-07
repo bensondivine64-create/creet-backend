@@ -330,6 +330,27 @@ def _execute_ai_action(db, action, target_id, message=None):
     return False, None
 
 
+def _build_context_snapshot(db):
+    total_users = db.query(models.User).count()
+    active_users = db.query(models.User).filter(models.User.account_status == "active").count()
+    suspended_users = db.query(models.User).filter(models.User.account_status == "suspended").count()
+    total_listings = db.query(models.Listing).count()
+    total_reports = db.query(models.Report).count()
+    pending_reports = db.query(models.Report).filter(models.Report.status == "pending").count()
+
+    from routers_settings import _get_settings
+    settings = _get_settings(db)
+
+    return (
+        f"LIVE PLATFORM DATA (use these real numbers when answering questions, never guess):\n"
+        f"- Total users: {total_users} (active: {active_users}, suspended: {suspended_users})\n"
+        f"- Total listings: {total_listings}\n"
+        f"- Total reports: {total_reports} (pending: {pending_reports})\n"
+        f"- Maintenance mode: {'ON' if settings.maintenance_mode else 'OFF'}\n"
+        f"- Announcement banner: {'active — ' + (settings.banner_text or '') if settings.banner_active else 'inactive'}\n"
+    )
+
+
 @admin_bp.post("/ai-assistant")
 @require_auth
 @require_admin
@@ -337,10 +358,18 @@ def ai_assistant():
     db = g.db
     data = request.get_json(force=True) or {}
     command = (data.get("message") or "").strip()
+    history = data.get("history") or []
     if not command:
         return jsonify({"detail": "Message is required"}), 422
 
-    prompt = SYSTEM_INSTRUCTIONS + command
+    context = _build_context_snapshot(db)
+
+    convo = ""
+    for h in history[-8:]:
+        role_label = "Admin" if h.get("role") == "admin" else "You"
+        convo += f"{role_label}: {h.get('text', '')}\n"
+
+    prompt = SYSTEM_INSTRUCTIONS + context + "\nConversation so far:\n" + convo + f"Admin: {command}"
 
     try:
         resp = requests.get(AI_ENDPOINT, params={"query": prompt}, timeout=20)
