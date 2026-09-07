@@ -214,16 +214,21 @@ def delete_listing_admin(listing_id):
 
 
 AI_ENDPOINT = "https://curiousapis.name.ng/ai_gpt5"
-SERIOUS_ACTIONS = {"SUSPEND_USER", "DELETE_LISTING"}
+SERIOUS_ACTIONS = {"SUSPEND_USER", "DELETE_LISTING", "MAKE_ADMIN"}
 
-SYSTEM_INSTRUCTIONS = """You are CREET's admin assistant. The admin will give you a command in plain English.
-Respond with EXACTLY one line first, in this format, then nothing else on that line:
-ACTION:<NONE|SUSPEND_USER|ACTIVATE_USER|VERIFY_USER|DELETE_LISTING|RESOLVE_REPORT>:<numeric_id_or_0>
+SYSTEM_INSTRUCTIONS = """You are CREET's admin assistant, helping the admin manage the platform (users, listings, reports).
 
-Use NONE:0 if the command doesn't match a real action or is missing a clear numeric ID.
-After that line, you may add a short plain-English explanation on the next line.
+If the admin's message is casual conversation, a greeting, a question, or anything that isn't a specific instruction to take action \
+(e.g. "hey", "hi", "how are you", "what can you do", "how many users do we have") \
+just reply naturally and conversationally. Do NOT include any ACTION line for these.
 
-Admin command: """
+Only when the admin is clearly asking you to perform a specific action with a specific numeric ID, respond with EXACTLY one line \
+FIRST, in this format, then your explanation on the next line:
+ACTION:<SUSPEND_USER|ACTIVATE_USER|VERIFY_USER|UNVERIFY_USER|MAKE_ADMIN|REMOVE_ADMIN|DELETE_LISTING|RESOLVE_REPORT>:<numeric_id>
+
+If they seem to want an action but didn't give a clear numeric ID, just ask them for it in plain conversational text — don't use the ACTION line.
+
+Admin message: """
 
 
 def _execute_ai_action(db, action, target_id):
@@ -231,7 +236,14 @@ def _execute_ai_action(db, action, target_id):
         user = db.query(models.User).filter(models.User.id == target_id).first()
         if not user:
             return False, "User not found"
+        if user.is_admin:
+            return False, "Can't suspend an admin"
+        from datetime import datetime, timedelta
         user.account_status = "suspended"
+        user.suspension_type = "serious"
+        user.suspension_until = datetime.utcnow() + timedelta(days=30)
+        user.suspension_reason = "Suspended by admin via AI assistant"
+        user.suspension_count = (user.suspension_count or 0) + 1
         db.commit()
         return True, None
     if action == "ACTIVATE_USER":
@@ -239,6 +251,8 @@ def _execute_ai_action(db, action, target_id):
         if not user:
             return False, "User not found"
         user.account_status = "active"
+        user.suspension_type = None
+        user.suspension_until = None
         db.commit()
         return True, None
     if action == "VERIFY_USER":
@@ -246,6 +260,29 @@ def _execute_ai_action(db, action, target_id):
         if not user:
             return False, "User not found"
         user.is_verified = True
+        db.commit()
+        return True, None
+    if action == "UNVERIFY_USER":
+        user = db.query(models.User).filter(models.User.id == target_id).first()
+        if not user:
+            return False, "User not found"
+        user.is_verified = False
+        db.commit()
+        return True, None
+    if action == "MAKE_ADMIN":
+        user = db.query(models.User).filter(models.User.id == target_id).first()
+        if not user:
+            return False, "User not found"
+        user.is_admin = True
+        db.commit()
+        return True, None
+    if action == "REMOVE_ADMIN":
+        user = db.query(models.User).filter(models.User.id == target_id).first()
+        if not user:
+            return False, "User not found"
+        if target_id == g.current_user.id:
+            return False, "Can't remove your own admin status"
+        user.is_admin = False
         db.commit()
         return True, None
     if action == "DELETE_LISTING":
