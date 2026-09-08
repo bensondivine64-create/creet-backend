@@ -483,6 +483,7 @@ def get_ai_logs():
             {
                 "id": r.id,
                 "command": r.command,
+                "ai_raw_response": r.ai_raw_response,
                 "action_taken": r.action_taken,
                 "target_id": r.target_id,
                 "success": r.success,
