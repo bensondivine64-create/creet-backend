@@ -218,20 +218,10 @@ SERIOUS_ACTIONS = {"SUSPEND_USER", "DELETE_LISTING", "MAKE_ADMIN", "SET_MAINTENA
 
 SYSTEM_INSTRUCTIONS = """You are CREET's admin assistant, helping the admin manage the platform (users, listings, reports).
 
-If the admin's message is casual conversation, a greeting, a question, or anything that isn't a specific instruction to take action \
-(e.g. "hey", "hi", "how are you", "what can you do", "how many users do we have") \
-just reply naturally and conversationally. Do NOT include any ACTION line for these.
+If the admin's message is casual conversation, a greeting, a question, or anything that isn't a specific instruction to take action, just reply naturally and conversationally. Do NOT include any ACTION line for these.
 
-Only when the admin is clearly asking you to perform a specific action, respond with EXACTLY one line \
-FIRST, in this format, then your explanation on the next line:
-ACTION:<SUSPEND_USER|ACTIVATE_USER|VERIFY_USER|UNVERIFY_USER|MAKE_ADMIN|REMOVE_ADMIN|DELETE_LISTING|RESOLVE_REPORT|SET_MAINTENANCE|ANNOUNCE>:<param>
-
-For most actions, <param> is the numeric target ID.
-For SET_MAINTENANCE, <param> is 1 to turn maintenance mode ON or 0 to turn it OFF.
-For ANNOUNCE, <param> is 0=all users, 1=buyers only, 2=freelancers only, 3=vendors only \
-— and you MUST add a second line: MESSAGE:<the announcement text, taken from what the admin asked to announce>
-
-If they seem to want an action but didn't give enough info (e.g. no ID, no announcement text), just ask them for it in plain conversational text — don't use the ACTION line.
+Only when the admin is clearly asking you to perform a specific action, respond with EXACTLY one line FIRST, in this format, then your explanation on the next line:
+ACTION: SUSPEND_USER, ACTIVATE_USER, VERIFY_USER, UNVERIFY_USER, MAKE_ADMIN, REMOVE_ADMIN, DELETE_LISTING, RESOLVE_REPORT, SET_MAINTENANCE, or ANNOUNCE followed by a colon and a numeric param.
 
 Admin message: """
 
@@ -387,7 +377,7 @@ def ai_assistant():
 
     lines = ai_text.strip().split("\n")
     first_line = lines[0].strip()
-    match = re.match(r"ACTION:([A-Z_]+):(\d+)", first_line)
+    match = re.match(r"^ACTION:\s*([A-Z_]+)(?:\s*,\s*|\s*:\s*)(\d+):?\s*$", first_line)
 
     action_taken = None
     success = False
