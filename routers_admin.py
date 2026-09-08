@@ -375,7 +375,7 @@ def ai_assistant():
         resp = requests.get(AI_ENDPOINT, params={"query": prompt}, timeout=20)
         resp.raise_for_status()
         ai_json = resp.json()
-        ai_text = ai_json.get("data", "")
+        ai_text = ai_json.get("data", "") or "Sorry, I didn't quite catch that — could you rephrase?"
     except Exception as e:
         log = models.AdminAiLog(
             admin_id=g.current_user.id, command=command, ai_raw_response=None,
