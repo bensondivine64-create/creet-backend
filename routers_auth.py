@@ -307,3 +307,57 @@ def reset_password():
         return jsonify({"success": True, "message": "Password updated"})
     finally:
         db.close()
+
+
+@auth_bp.put("/me/notifications")
+@require_auth
+def update_notification_prefs():
+    db = g.db
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+
+    if "notify_messages" in data:
+        user.notify_messages = bool(data["notify_messages"])
+    if "notify_announcements" in data:
+        user.notify_announcements = bool(data["notify_announcements"])
+    if "notify_listing_activity" in data:
+        user.notify_listing_activity = bool(data["notify_listing_activity"])
+
+    db.commit()
+    return jsonify(user_to_dict(user))
+
+
+@auth_bp.post("/me/change-password")
+@require_auth
+def change_password():
+    db = g.db
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+
+    current_password = data.get("current_password", "")
+    new_password = data.get("new_password", "")
+
+    if not verify_password(current_password, user.password_hash):
+        return jsonify({"detail": "Current password is incorrect"}), 401
+    if len(new_password) < 8:
+        return jsonify({"detail": "New password must be at least 8 characters"}), 422
+
+    user.password_hash = hash_password(new_password)
+    db.commit()
+    return jsonify({"success": True})
+
+
+@auth_bp.post("/me/delete-account")
+@require_auth
+def delete_account():
+    db = g.db
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+
+    password = data.get("password", "")
+    if not verify_password(password, user.password_hash):
+        return jsonify({"detail": "Incorrect password"}), 401
+
+    db.delete(user)
+    db.commit()
+    return jsonify({"success": True})

@@ -14,6 +14,9 @@ def user_to_dict(user):
         "categories": user.categories or [],
         "profile_completed": bool(user.profile_completed),
         "account_status": user.account_status or "active",
+        "notify_messages": bool(user.notify_messages) if user.notify_messages is not None else True,
+        "notify_announcements": bool(user.notify_announcements) if user.notify_announcements is not None else True,
+        "notify_listing_activity": bool(user.notify_listing_activity) if user.notify_listing_activity is not None else True,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 

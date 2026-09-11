@@ -22,6 +22,9 @@ class User(Base):
     categories = Column(JSON, default=list)
     profile_completed = Column(Boolean, default=False)
     account_status = Column(String(20), default="active")  # active | suspended
+    notify_messages = Column(Boolean, default=True)
+    notify_announcements = Column(Boolean, default=True)
+    notify_listing_activity = Column(Boolean, default=True)
     suspension_type = Column(String(10), nullable=True)  # temporary | serious
     suspension_until = Column(DateTime, nullable=True)
     suspension_reason = Column(Text, nullable=True)
