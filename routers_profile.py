@@ -43,6 +43,8 @@ def update_profile():
             user.location = (data["location"] or "").strip()[:255]
         if "categories" in data and isinstance(data["categories"], list):
             user.categories = data["categories"][:10]
+        if "onboarding_extra" in data and isinstance(data["onboarding_extra"], dict):
+            user.onboarding_extra = data["onboarding_extra"]
 
         user.profile_completed = True
 
