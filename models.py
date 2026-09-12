@@ -59,6 +59,17 @@ class SiteSettings(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class Connection(Base):
+    __tablename__ = "connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    requester_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(10), default="pending")  # pending | accepted | declined
+    created_at = Column(DateTime, server_default=func.now())
+    responded_at = Column(DateTime, nullable=True)
+
+
 class OtpCode(Base):
     __tablename__ = "otp_codes"
 
