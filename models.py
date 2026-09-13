@@ -18,6 +18,7 @@ class User(Base):
     is_premium = Column(Boolean, default=False)
     premium_expires = Column(DateTime, nullable=True)
     avatar = Column(String(500), nullable=True)
+    cover_photo = Column(String(500), nullable=True)
     bio = Column(Text, nullable=True)
     location = Column(String(255), nullable=True)
     categories = Column(JSON, default=list)

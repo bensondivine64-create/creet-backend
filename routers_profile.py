@@ -57,6 +57,17 @@ def update_profile():
         raise
 
 
+def _connection_count(db, user_id):
+    return (
+        db.query(models.Connection)
+        .filter(
+            models.Connection.status == "accepted",
+            (models.Connection.requester_id == user_id) | (models.Connection.recipient_id == user_id),
+        )
+        .count()
+    )
+
+
 @profile_bp.get("/<string:username>")
 def get_public_profile(username):
     db = SessionLocal()
@@ -78,12 +89,14 @@ def get_public_profile(username):
             "full_name": user.full_name,
             "role": user.role,
             "avatar": user.avatar,
+            "cover_photo": user.cover_photo,
             "bio": user.bio,
             "location": user.location,
             "categories": user.categories or [],
             "is_verified": bool(user.is_verified),
             "is_premium": bool(user.is_premium),
             "verified_badge": is_badge_verified(user),
+            "connection_count": _connection_count(db, user.id),
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "listings": [listing_to_dict(l, user) for l in listings],
         })
@@ -91,11 +104,11 @@ def get_public_profile(username):
         db.close()
 
 
-ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
 
-def _allowed_avatar(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_AVATAR_EXTENSIONS
+def _allowed_image(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
 @profile_bp.post("/avatar")
@@ -107,10 +120,29 @@ def upload_avatar():
     f = request.files.get("avatar")
     if not f or not f.filename:
         return jsonify({"detail": "No image provided"}), 422
-    if not _allowed_avatar(f.filename):
+    if not _allowed_image(f.filename):
         return jsonify({"detail": "Allowed formats: jpg, jpeg, png, webp"}), 422
 
     user.avatar = upload_image(f, folder="creet/avatars")
+    db.commit()
+    db.refresh(user)
+
+    return jsonify(user_to_dict(user))
+
+
+@profile_bp.post("/cover")
+@require_auth
+def upload_cover():
+    db = g.db
+    user = g.current_user
+
+    f = request.files.get("cover")
+    if not f or not f.filename:
+        return jsonify({"detail": "No image provided"}), 422
+    if not _allowed_image(f.filename):
+        return jsonify({"detail": "Allowed formats: jpg, jpeg, png, webp"}), 422
+
+    user.cover_photo = upload_image(f, folder="creet/covers")
     db.commit()
     db.refresh(user)
 

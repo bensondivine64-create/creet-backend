@@ -24,6 +24,7 @@ def user_to_dict(user):
         "is_premium": bool(user.is_premium),
         "verified_badge": is_badge_verified(user),
         "avatar": user.avatar,
+        "cover_photo": user.cover_photo,
         "bio": user.bio,
         "location": user.location,
         "categories": user.categories or [],
