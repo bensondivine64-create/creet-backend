@@ -21,6 +21,7 @@ class User(Base):
     cover_photo = Column(String(500), nullable=True)
     bio = Column(Text, nullable=True)
     location = Column(String(255), nullable=True)
+    country = Column(String(100), nullable=True)
     categories = Column(JSON, default=list)
     profile_completed = Column(Boolean, default=False)
     account_status = Column(String(20), default="active")  # active | suspended

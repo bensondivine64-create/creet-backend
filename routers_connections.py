@@ -4,7 +4,8 @@ from flask import Blueprint, jsonify, g, request
 import models
 from database import SessionLocal
 from auth import require_auth
-from serializers import is_badge_verified
+from serializers import is_badge_verified, listing_to_dict
+from geolocation import get_client_country
 
 connections_bp = Blueprint("connections", __name__, url_prefix="/api/connections")
 
@@ -50,7 +51,6 @@ def get_status(user_id):
 def send_request(user_id):
     db = g.db
     me = g.current_user.id
-
     if user_id == me:
         return jsonify({"detail": "Can't connect with yourself"}), 400
 
@@ -149,6 +149,7 @@ def list_my_connections():
 def get_connections_feed():
     db = g.db
     me = g.current_user.id
+    viewer_country = get_client_country()
 
     accepted = (
         db.query(models.Connection)
@@ -165,7 +166,6 @@ def get_connections_feed():
     if not connection_ids:
         return jsonify({"listings": []})
 
-    from serializers import listing_to_dict
     rows = (
         db.query(models.Listing)
         .filter(models.Listing.seller_id.in_(connection_ids), models.Listing.status == "active")
@@ -177,6 +177,6 @@ def get_connections_feed():
     for row in rows:
         seller = db.query(models.User).filter(models.User.id == row.seller_id).first()
         if seller:
-            results.append(listing_to_dict(row, seller))
+            results.append(listing_to_dict(row, seller, viewer_country=viewer_country))
 
     return jsonify({"listings": results})

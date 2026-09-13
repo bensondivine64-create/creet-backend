@@ -73,6 +73,15 @@ def require_auth(fn):
             user = db.query(models.User).filter(models.User.id == int(payload["sub"])).first()
             if not user:
                 return jsonify({"detail": "Account not found"}), 401
+            if not user.country:
+                try:
+                    from geolocation import get_client_country
+                    detected = get_client_country()
+                    if detected:
+                        user.country = detected
+                        db.commit()
+                except Exception:
+                    pass
             if user.account_status == "suspended":
                 if user.suspension_until and user.suspension_until <= datetime.utcnow():
                     user.account_status = "active"

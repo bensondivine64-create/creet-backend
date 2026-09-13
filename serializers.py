@@ -1,4 +1,5 @@
 from datetime import datetime
+from currency import convert_currency
 
 def is_badge_verified(user):
     if user.is_admin:
@@ -27,6 +28,7 @@ def user_to_dict(user):
         "cover_photo": user.cover_photo,
         "bio": user.bio,
         "location": user.location,
+        "country": user.country,
         "categories": user.categories or [],
         "profile_completed": bool(user.profile_completed),
         "account_status": user.account_status or "active",
@@ -38,15 +40,29 @@ def user_to_dict(user):
     }
 
 
-def listing_to_dict(listing, seller):
+def listing_to_dict(listing, seller, viewer_country=None):
+    price = float(listing.price or 0)
+    currency = listing.currency or "NGN"
+    display_price = price
+    display_currency = currency
+
+    seller_country = getattr(seller, "country", None)
+    if viewer_country and seller_country and viewer_country != seller_country:
+        converted = convert_currency(price, currency, "USD")
+        if converted is not None:
+            display_price = converted
+            display_currency = "USD"
+
     d = {
         "id": listing.id,
         "kind": listing.kind,
         "title": listing.title,
         "description": listing.description,
         "category": listing.category,
-        "price": float(listing.price or 0),
-        "currency": listing.currency or "NGN",
+        "price": price,
+        "currency": currency,
+        "display_price": display_price,
+        "display_currency": display_currency,
         "images": listing.images or [],
         "seller": {
             "username": seller.username,

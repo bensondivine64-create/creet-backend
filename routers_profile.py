@@ -4,6 +4,7 @@ from cloud_storage import upload_image
 from database import SessionLocal
 from auth import require_auth
 from serializers import user_to_dict, listing_to_dict, is_badge_verified
+from geolocation import get_client_country
 import models
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
@@ -70,6 +71,7 @@ def _connection_count(db, user_id):
 
 @profile_bp.get("/<string:username>")
 def get_public_profile(username):
+    viewer_country = get_client_country()
     db = SessionLocal()
     try:
         user = db.query(models.User).filter(models.User.username == username).first()
@@ -98,7 +100,7 @@ def get_public_profile(username):
             "verified_badge": is_badge_verified(user),
             "connection_count": _connection_count(db, user.id),
             "created_at": user.created_at.isoformat() if user.created_at else None,
-            "listings": [listing_to_dict(l, user) for l in listings],
+            "listings": [listing_to_dict(l, user, viewer_country=viewer_country) for l in listings],
         })
     finally:
         db.close()

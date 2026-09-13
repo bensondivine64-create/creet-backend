@@ -6,6 +6,7 @@ import models
 from database import SessionLocal
 from auth import require_auth
 from serializers import listing_to_dict
+from geolocation import get_client_country, currency_for_country
 
 listings_bp = Blueprint("listings", __name__, url_prefix="/api/listings")
 
@@ -20,6 +21,8 @@ def get_listings():
     category = request.args.get("category", "")
     limit = int(request.args.get("limit", 40))
     offset = int(request.args.get("offset", 0))
+
+    viewer_country = get_client_country()
 
     db = SessionLocal()
     try:
@@ -36,6 +39,13 @@ def get_listings():
         if category:
             query = query.filter(models.Listing.category == category)
 
+        # Country filtering applies only to Products. Gigs (freelancers) and
+        # Requests (buyers) stay fully global regardless of viewer location.
+        if kind == "product" and viewer_country:
+            query = query.join(models.User, models.User.id == models.Listing.seller_id).filter(
+                models.User.country == viewer_country
+            )
+
         total = query.count()
         rows = query.order_by(models.Listing.created_at.desc()).offset(offset).limit(limit).all()
 
@@ -43,7 +53,7 @@ def get_listings():
         for row in rows:
             seller = db.query(models.User).filter(models.User.id == row.seller_id).first()
             if seller:
-                results.append(listing_to_dict(row, seller))
+                results.append(listing_to_dict(row, seller, viewer_country=viewer_country))
 
         return jsonify({"listings": results, "total": total})
     finally:
@@ -69,6 +79,7 @@ def get_my_listings():
 
 @listings_bp.get("/<int:listing_id>")
 def get_listing(listing_id):
+    viewer_country = get_client_country()
     db = SessionLocal()
     try:
         row = db.query(models.Listing).filter(models.Listing.id == listing_id).first()
@@ -77,7 +88,7 @@ def get_listing(listing_id):
         seller = db.query(models.User).filter(models.User.id == row.seller_id).first()
         if not seller:
             return jsonify({"detail": "This listing doesn't exist"}), 404
-        return jsonify(listing_to_dict(row, seller))
+        return jsonify(listing_to_dict(row, seller, viewer_country=viewer_country))
     finally:
         db.close()
 
@@ -99,6 +110,9 @@ def _create_listing(kind, required_fields):
             images = []
         images = [str(u) for u in images if isinstance(u, str)][:6]
 
+        seller_country = g.current_user.country
+        currency = currency_for_country(seller_country) if seller_country else "NGN"
+
         listing = models.Listing(
             seller_id=g.current_user.id,
             kind=kind,
@@ -106,7 +120,7 @@ def _create_listing(kind, required_fields):
             description=data["description"],
             category=data["category"],
             price=data.get("price", 0),
-            currency="NGN",
+            currency=currency,
             images=images,
         )
         if kind == "gig":
