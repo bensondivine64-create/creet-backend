@@ -71,7 +71,7 @@ def signup():
             full_name=full_name,
             role=role,
             is_admin=is_admin,
-            is_verified=is_admin,
+            email_confirmed=is_admin,
         )
         db.add(user)
         db.commit()
@@ -120,7 +120,7 @@ def login():
             db.commit()
             return jsonify({"detail": "Incorrect email or password"}), 401
 
-        if not user.is_verified:
+        if not user.email_confirmed:
             return jsonify({"detail": "Account not verified — check your email"}), 403
 
         if user.account_status == "suspended":
@@ -171,7 +171,7 @@ def google_login():
                 full_name=info["full_name"],
                 role=role,
                 is_admin=is_admin,
-                is_verified=True,
+                email_confirmed=True,
             )
             db.add(user)
             db.commit()
@@ -215,7 +215,7 @@ def verify_otp():
         if not user:
             return jsonify({"detail": "Account not found"}), 404
 
-        user.is_verified = True
+        user.email_confirmed = True
         otp.used = True
         db.commit()
 

@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 
 import models
+from serializers import is_badge_verified
 from database import SessionLocal
 from auth import require_auth
 
@@ -46,7 +47,7 @@ def get_conversations():
                     "username": other.username,
                     "full_name": other.full_name,
                     "avatar": other.avatar,
-                    "verified": bool(other.is_verified),
+                    "verified": is_badge_verified(other),
                 },
                 "listing_id": conv.listing_id,
                 "listing_title": listing_title,

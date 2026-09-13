@@ -1,3 +1,17 @@
+from datetime import datetime
+
+def is_badge_verified(user):
+    if user.is_admin:
+        return True
+    if user.is_premium:
+        if user.premium_expires and user.premium_expires < datetime.utcnow():
+            pass
+        else:
+            return True
+    if user.is_verified:
+        return True
+    return False
+
 def user_to_dict(user):
     return {
         "id": user.id,
@@ -8,6 +22,7 @@ def user_to_dict(user):
         "is_admin": bool(user.is_admin),
         "is_verified": bool(user.is_verified),
         "is_premium": bool(user.is_premium),
+        "verified_badge": is_badge_verified(user),
         "avatar": user.avatar,
         "bio": user.bio,
         "location": user.location,
@@ -36,7 +51,7 @@ def listing_to_dict(listing, seller):
             "username": seller.username,
             "full_name": seller.full_name,
             "avatar": seller.avatar,
-            "verified": bool(seller.is_verified),
+            "verified": is_badge_verified(seller),
         },
         "rating_avg": float(listing.rating_avg or 0),
         "rating_count": listing.rating_count or 0,
@@ -61,7 +76,7 @@ def comment_to_dict(comment, author):
             "username": author.username,
             "full_name": author.full_name,
             "avatar": author.avatar,
-            "verified": bool(author.is_verified),
+            "verified": is_badge_verified(author),
         },
         "content": comment.content,
         "created_at": comment.created_at.isoformat() if comment.created_at else None,

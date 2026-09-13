@@ -3,7 +3,7 @@ from cloud_storage import upload_image
 
 from database import SessionLocal
 from auth import require_auth
-from serializers import user_to_dict, listing_to_dict
+from serializers import user_to_dict, listing_to_dict, is_badge_verified
 import models
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
@@ -83,6 +83,7 @@ def get_public_profile(username):
             "categories": user.categories or [],
             "is_verified": bool(user.is_verified),
             "is_premium": bool(user.is_premium),
+            "verified_badge": is_badge_verified(user),
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "listings": [listing_to_dict(l, user) for l in listings],
         })
@@ -140,7 +141,7 @@ def get_profile_directory(role):
                     "avatar": u.avatar,
                     "bio": u.bio,
                     "location": u.location,
-                    "is_verified": bool(u.is_verified),
+                    "verified_badge": is_badge_verified(u),
                 }
                 for u in users
             ]

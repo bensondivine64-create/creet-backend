@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, g, request
 import models
 from database import SessionLocal
 from auth import require_auth
+from serializers import is_badge_verified
 
 connections_bp = Blueprint("connections", __name__, url_prefix="/api/connections")
 
@@ -15,7 +16,7 @@ def _user_brief(u):
         "full_name": u.full_name,
         "avatar": u.avatar,
         "role": u.role,
-        "is_verified": bool(u.is_verified),
+        "verified_badge": is_badge_verified(u),
     }
 
 

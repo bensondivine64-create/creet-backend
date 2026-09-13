@@ -14,6 +14,7 @@ class User(Base):
     role = Column(String(20), nullable=False)  # buyer | freelancer | vendor
     is_admin = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
+    email_confirmed = Column(Boolean, default=False)
     is_premium = Column(Boolean, default=False)
     premium_expires = Column(DateTime, nullable=True)
     avatar = Column(String(500), nullable=True)
