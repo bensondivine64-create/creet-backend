@@ -42,6 +42,8 @@ def update_profile():
             user.bio = (data["bio"] or "").strip()[:1000]
         if "location" in data:
             user.location = (data["location"] or "").strip()[:255]
+        if "country" in data:
+            user.country = (data["country"] or "").strip()[:100] or None
         if "categories" in data and isinstance(data["categories"], list):
             user.categories = data["categories"][:10]
         if "onboarding_extra" in data and isinstance(data["onboarding_extra"], dict):
