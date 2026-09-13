@@ -176,3 +176,15 @@ class PremiumPayment(Base):
     flutterwave_id = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     verified_at = Column(DateTime, nullable=True)
+
+
+class Ad(Base):
+    __tablename__ = "ads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    image_url = Column(String(500), nullable=False)
+    link_url = Column(String(500), nullable=True)
+    position = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
