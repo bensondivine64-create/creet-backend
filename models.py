@@ -160,3 +160,18 @@ class Report(Base):
     status = Column(String(10), default="pending")  # pending | resolved
     created_at = Column(DateTime, server_default=func.now())
     resolved_at = Column(DateTime, nullable=True)
+
+
+class PremiumPayment(Base):
+    __tablename__ = "premium_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    plan = Column(String(20), nullable=False)  # monthly | three_months | yearly
+    tx_ref = Column(String(100), unique=True, nullable=False, index=True)
+    amount = Column(Numeric(12, 2), nullable=False)
+    currency = Column(String(10), default="NGN")
+    status = Column(String(20), default="pending")  # pending | successful | failed
+    flutterwave_id = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    verified_at = Column(DateTime, nullable=True)

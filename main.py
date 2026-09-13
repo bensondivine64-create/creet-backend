@@ -13,6 +13,7 @@ from routers_admin import admin_bp
 from routers_reports import reports_bp
 from routers_settings import settings_bp
 from routers_connections import connections_bp
+from routers_payments import payments_bp
 
 Base.metadata.create_all(bind=engine)
 
@@ -29,6 +30,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(reports_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(connections_bp)
+app.register_blueprint(payments_bp)
 
 
 @app.get("/api/health")
