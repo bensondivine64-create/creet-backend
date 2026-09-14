@@ -27,6 +27,7 @@ def user_to_dict(user):
         "avatar": user.avatar,
         "cover_photo": user.cover_photo,
         "bio": user.bio,
+        "short_bio": user.short_bio,
         "location": user.location,
         "country": user.country,
         "categories": user.categories or [],

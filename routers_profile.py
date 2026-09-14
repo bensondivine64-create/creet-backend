@@ -40,6 +40,8 @@ def update_profile():
 
         if "bio" in data:
             user.bio = (data["bio"] or "").strip()[:1000]
+        if "short_bio" in data:
+            user.short_bio = (data["short_bio"] or "").strip()[:150]
         if "location" in data:
             user.location = (data["location"] or "").strip()[:255]
         if "country" in data:
@@ -94,7 +96,7 @@ def get_public_profile(username):
             "role": user.role,
             "avatar": user.avatar,
             "cover_photo": user.cover_photo,
-            "bio": user.bio,
+            "short_bio": user.short_bio,
             "location": user.location,
             "categories": user.categories or [],
             "is_verified": bool(user.is_verified),
@@ -175,7 +177,7 @@ def get_profile_directory(role):
                     "username": u.username,
                     "full_name": u.full_name,
                     "avatar": u.avatar,
-                    "bio": u.bio,
+                    "bio": u.short_bio,
                     "location": u.location,
                     "verified_badge": is_badge_verified(u),
                 }

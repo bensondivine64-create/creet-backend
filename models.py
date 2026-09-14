@@ -20,6 +20,7 @@ class User(Base):
     avatar = Column(String(500), nullable=True)
     cover_photo = Column(String(500), nullable=True)
     bio = Column(Text, nullable=True)
+    short_bio = Column(String(150), nullable=True)
     location = Column(String(255), nullable=True)
     country = Column(String(100), nullable=True)
     categories = Column(JSON, default=list)
