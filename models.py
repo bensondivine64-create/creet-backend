@@ -139,6 +139,8 @@ class Conversation(Base):
     user_a_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     user_b_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     listing_id = Column(Integer, ForeignKey("listings.id"), nullable=True)
+    user_a_last_read = Column(DateTime, nullable=True)
+    user_b_last_read = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -201,4 +203,13 @@ class Review(Base):
     reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     rating = Column(Integer, nullable=False)  # 1-5
     comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class Block(Base):
+    __tablename__ = "blocks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    blocker_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    blocked_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())

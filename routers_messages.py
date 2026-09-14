@@ -1,15 +1,28 @@
+from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
 import models
 from serializers import is_badge_verified
 from database import SessionLocal
 from auth import require_auth
+from routers_blocks import is_blocked_either_way
 
 messages_bp = Blueprint("messages", __name__, url_prefix="/api/conversations")
 
 
 def other_user_id(conv, my_id):
     return conv.user_b_id if conv.user_a_id == my_id else conv.user_a_id
+
+
+def my_last_read(conv, my_id):
+    return conv.user_a_last_read if conv.user_a_id == my_id else conv.user_b_last_read
+
+
+def set_my_last_read(conv, my_id, when):
+    if conv.user_a_id == my_id:
+        conv.user_a_last_read = when
+    else:
+        conv.user_b_last_read = when
 
 
 @messages_bp.get("")
@@ -40,7 +53,14 @@ def get_conversations():
                 listing = db.query(models.Listing).filter(models.Listing.id == conv.listing_id).first()
                 if listing:
                     listing_title = listing.title
-            unread_count = 0  # basic implementation, no per-user read tracking yet
+            last_read = my_last_read(conv, me)
+            unread_query = db.query(models.Message).filter(
+                models.Message.conversation_id == conv.id,
+                models.Message.sender_id != me,
+            )
+            if last_read:
+                unread_query = unread_query.filter(models.Message.created_at > last_read)
+            unread_count = unread_query.count()
             results.append({
                 "id": conv.id,
                 "participant": {
@@ -78,6 +98,8 @@ def start_conversation():
         seller_id = listing.seller_id
         if seller_id == me:
             return jsonify({"detail": "You can't message yourself"}), 400
+        if is_blocked_either_way(db, me, seller_id):
+            return jsonify({"detail": "You can't message this user"}), 403
 
         existing = (
             db.query(models.Conversation)
@@ -108,6 +130,9 @@ def get_messages(conv_id):
         conv = db.query(models.Conversation).filter(models.Conversation.id == conv_id).first()
         if not conv or g.current_user.id not in (conv.user_a_id, conv.user_b_id):
             return jsonify({"detail": "Conversation not found"}), 404
+
+        set_my_last_read(conv, g.current_user.id, datetime.utcnow())
+        db.commit()
 
         rows = (
             db.query(models.Message)
@@ -143,6 +168,10 @@ def send_message(conv_id):
         conv = db.query(models.Conversation).filter(models.Conversation.id == conv_id).first()
         if not conv or g.current_user.id not in (conv.user_a_id, conv.user_b_id):
             return jsonify({"detail": "Conversation not found"}), 404
+
+        other_id = other_user_id(conv, g.current_user.id)
+        if is_blocked_either_way(db, g.current_user.id, other_id):
+            return jsonify({"detail": "You can't message this user"}), 403
 
         msg = models.Message(conversation_id=conv_id, sender_id=g.current_user.id, content=content)
         db.add(msg)
