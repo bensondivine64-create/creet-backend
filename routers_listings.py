@@ -111,7 +111,9 @@ def _create_listing(kind, required_fields):
         images = [str(u) for u in images if isinstance(u, str)][:6]
 
         seller_country = g.current_user.country
-        currency = currency_for_country(seller_country) if seller_country else "NGN"
+        local_currency = currency_for_country(seller_country) if seller_country else "NGN"
+        requested_currency = (data.get("currency") or "").upper().strip()
+        currency = requested_currency if requested_currency in (local_currency, "USD") else local_currency
 
         listing = models.Listing(
             seller_id=g.current_user.id,
@@ -191,6 +193,12 @@ def update_listing(listing_id):
         listing.category = data["category"]
     if "price" in data:
         listing.price = data.get("price", 0)
+    if "currency" in data:
+        seller_country = g.current_user.country
+        local_currency = currency_for_country(seller_country) if seller_country else "NGN"
+        requested_currency = (data.get("currency") or "").upper().strip()
+        if requested_currency in (local_currency, "USD"):
+            listing.currency = requested_currency
     if "images" in data and isinstance(data["images"], list):
         listing.images = [str(u) for u in data["images"] if isinstance(u, str)][:6]
 
