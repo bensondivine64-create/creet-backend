@@ -21,7 +21,7 @@ from routers_blocks import blocks_bp
 Base.metadata.create_all(bind=engine)
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://localhost:3001", "https://creet.name.ng"])
+CORS(app, origins=["http://localhost:3000", "http://localhost:3001", "https://creet.name.ng"], supports_credentials=True)
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(listings_bp)

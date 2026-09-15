@@ -1,7 +1,7 @@
 import os
 import secrets
 from datetime import datetime, timedelta, date
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, make_response
 
 import models
 from database import SessionLocal
@@ -12,6 +12,19 @@ from recaptcha import verify_recaptcha
 from google_auth import verify_google_token
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
+
+def _set_session_cookie(response, token):
+    response.set_cookie(
+        "creet_session",
+        token,
+        httponly=True,
+        secure=True,
+        samesite="None",
+        max_age=7 * 24 * 60 * 60,
+        path="/",
+    )
+    return response
+
 
 VALID_SIGNUP_ROLES = {"buyer", "freelancer", "vendor"}
 OTP_EXPIRE_MINUTES = 10
@@ -153,7 +166,8 @@ def login():
         db.commit()
 
         token = create_token(user.id, user.role)
-        return jsonify({"access_token": token, "user": user_to_dict(user)})
+        resp = make_response(jsonify({"access_token": token, "user": user_to_dict(user)}))
+        return _set_session_cookie(resp, token)
     finally:
         db.close()
 
@@ -194,7 +208,8 @@ def google_login():
             db.refresh(user)
 
         token = create_token(user.id, user.role)
-        return jsonify({"access_token": token, "user": user_to_dict(user)})
+        resp = make_response(jsonify({"access_token": token, "user": user_to_dict(user)}))
+        return _set_session_cookie(resp, token)
     finally:
         db.close()
 
@@ -203,6 +218,13 @@ def google_login():
 @require_auth
 def get_me():
     return jsonify(user_to_dict(g.current_user))
+
+
+@auth_bp.post("/logout")
+def logout():
+    resp = make_response(jsonify({"success": True}))
+    resp.set_cookie("creet_session", "", expires=0, path="/", secure=True, samesite="None", httponly=True)
+    return resp
 
 
 @auth_bp.post("/verify-otp")
@@ -236,7 +258,8 @@ def verify_otp():
         db.commit()
 
         token = create_token(user.id, user.role)
-        return jsonify({"access_token": token, "user": user_to_dict(user)})
+        resp = make_response(jsonify({"access_token": token, "user": user_to_dict(user)}))
+        return _set_session_cookie(resp, token)
     finally:
         db.close()
 

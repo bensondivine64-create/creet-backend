@@ -58,13 +58,20 @@ def is_valid_email(email: str) -> bool:
     return bool(email and EMAIL_RE.match(email))
 
 
+def _extract_token():
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header.split(" ", 1)[1]
+    return request.cookies.get("creet_session")
+
+
 def require_auth(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
+        token = _extract_token()
+        if not token:
             return jsonify({"detail": "Invalid session"}), 401
-        payload = decode_token(auth_header.split(" ", 1)[1])
+        payload = decode_token(token)
         if not payload:
             return jsonify({"detail": "Invalid session"}), 401
 
