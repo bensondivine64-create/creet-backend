@@ -45,6 +45,32 @@ def _determine_charge_amount(charge_currency):
     return base_amount_ngn
 
 
+@payments_bp.get("/premium/quote")
+def premium_quote():
+    from auth import require_auth
+
+    @require_auth
+    def _inner():
+        user = g.current_user
+        charge_currency = _determine_charge_currency(user)
+
+        quotes = {}
+        for plan, amount_ngn in PLAN_AMOUNTS_NGN.items():
+            if charge_currency == "NGN":
+                amount = amount_ngn
+            else:
+                converted = convert_currency(amount_ngn, "NGN", charge_currency)
+                amount = converted if converted is not None else amount_ngn
+            quotes[plan] = amount
+
+        return jsonify({
+            "currency": charge_currency,
+            "amounts": quotes,
+        })
+
+    return _inner()
+
+
 @payments_bp.post("/premium/initiate")
 def initiate_premium():
     from auth import require_auth  # local import to avoid circulars, matches project style
