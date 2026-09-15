@@ -10,12 +10,18 @@ comments_bp = Blueprint("comments", __name__, url_prefix="/api/listings")
 
 @comments_bp.get("/<int:listing_id>/comments")
 def get_comments(listing_id):
+    from flask import request
+    limit = min(int(request.args.get("limit", 10)), 50)
+    offset = int(request.args.get("offset", 0))
     db = SessionLocal()
     try:
+        base_query = db.query(models.Comment).filter(models.Comment.listing_id == listing_id)
+        total = base_query.count()
         rows = (
-            db.query(models.Comment)
-            .filter(models.Comment.listing_id == listing_id)
+            base_query
             .order_by(models.Comment.created_at.desc())
+            .offset(offset)
+            .limit(limit)
             .all()
         )
         results = []
@@ -23,7 +29,7 @@ def get_comments(listing_id):
             author = db.query(models.User).filter(models.User.id == c.author_id).first()
             if author:
                 results.append(comment_to_dict(c, author))
-        return jsonify({"comments": results, "total": len(results)})
+        return jsonify({"comments": results, "total": total})
     finally:
         db.close()
 

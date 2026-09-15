@@ -28,13 +28,21 @@ def set_my_last_read(conv, my_id, when):
 @messages_bp.get("")
 @require_auth
 def get_conversations():
+    from flask import request
+    limit = min(int(request.args.get("limit", 30)), 50)
+    offset = int(request.args.get("offset", 0))
     db = SessionLocal()
     try:
         me = g.current_user.id
+        base_query = db.query(models.Conversation).filter(
+            (models.Conversation.user_a_id == me) | (models.Conversation.user_b_id == me)
+        )
+        total = base_query.count()
         rows = (
-            db.query(models.Conversation)
-            .filter((models.Conversation.user_a_id == me) | (models.Conversation.user_b_id == me))
+            base_query
             .order_by(models.Conversation.created_at.desc())
+            .offset(offset)
+            .limit(limit)
             .all()
         )
         results = []
@@ -75,7 +83,7 @@ def get_conversations():
                 "last_message_at": last_msg.created_at.isoformat() if last_msg and last_msg.created_at else conv.created_at.isoformat(),
                 "unread_count": unread_count,
             })
-        return jsonify({"conversations": results})
+        return jsonify({"conversations": results, "total": total})
     finally:
         db.close()
 
