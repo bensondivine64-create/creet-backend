@@ -5,6 +5,8 @@ import requests
 from flask import Blueprint, request, jsonify, g
 
 import models
+from geolocation import currency_for_country
+from currency import convert_currency
 
 payments_bp = Blueprint("payments", __name__, url_prefix="/api/payments")
 
@@ -12,7 +14,14 @@ FLUTTERWAVE_SECRET_KEY = "FLWSECK-f6f678b69327963dcdfb5015deff9492-1a090c32ca1vt
 FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK-78c8e65ab6798f6027915f1982550d71-X"
 FLUTTERWAVE_VERIFY_URL = "https://api.flutterwave.com/v3/transactions/verify_by_reference"
 
-PLAN_AMOUNTS = {
+# Currencies Flutterwave currently accepts for card transactions.
+# Source: Flutterwave help center, "What are the currencies accepted on Flutterwave".
+FLUTTERWAVE_SUPPORTED_CURRENCIES = {
+    "GBP", "CAD", "XAF", "COP", "EGP", "EUR", "GHS", "KES", "INR",
+    "NGN", "RWF", "SLL", "ZAR", "TZS", "UGX", "USD", "XOF", "ZMW",
+}
+
+PLAN_AMOUNTS_NGN = {
     "monthly": 2000,
     "three_months": 5500,
     "yearly": 20000,
@@ -24,6 +33,18 @@ PLAN_DAYS = {
 }
 
 
+def _determine_charge_currency(user):
+    local_currency = currency_for_country(user.country) if user.country else "NGN"
+    if local_currency in FLUTTERWAVE_SUPPORTED_CURRENCIES:
+        return local_currency
+    return "USD"
+
+
+def _determine_charge_amount(charge_currency):
+    base_amount_ngn = PLAN_AMOUNTS_NGN
+    return base_amount_ngn
+
+
 @payments_bp.post("/premium/initiate")
 def initiate_premium():
     from auth import require_auth  # local import to avoid circulars, matches project style
@@ -32,20 +53,34 @@ def initiate_premium():
     def _inner():
         data = request.get_json(force=True) or {}
         plan = data.get("plan")
-        if plan not in PLAN_AMOUNTS:
+        if plan not in PLAN_AMOUNTS_NGN:
             return jsonify({"detail": "Invalid plan"}), 422
 
         user = g.current_user
         db = g.db
         tx_ref = f"CREET-{user.id}-{uuid.uuid4().hex[:10]}"
-        amount = PLAN_AMOUNTS[plan]
+
+        amount_ngn = PLAN_AMOUNTS_NGN[plan]
+        charge_currency = _determine_charge_currency(user)
+
+        if charge_currency == "NGN":
+            amount = amount_ngn
+        else:
+            converted = convert_currency(amount_ngn, "NGN", charge_currency)
+            if converted is None:
+                # Conversion service unreachable — fall back to NGN, which is
+                # always guaranteed to work, rather than fail the checkout.
+                charge_currency = "NGN"
+                amount = amount_ngn
+            else:
+                amount = converted
 
         payment = models.PremiumPayment(
             user_id=user.id,
             plan=plan,
             tx_ref=tx_ref,
             amount=amount,
-            currency="NGN",
+            currency=charge_currency,
             status="pending",
         )
         db.add(payment)
@@ -54,7 +89,7 @@ def initiate_premium():
         return jsonify({
             "tx_ref": tx_ref,
             "amount": amount,
-            "currency": "NGN",
+            "currency": charge_currency,
             "public_key": FLUTTERWAVE_PUBLIC_KEY,
             "customer": {"email": user.email, "name": user.full_name},
         })
@@ -103,7 +138,7 @@ def verify_premium():
             db.commit()
             return jsonify({"detail": "Payment could not be verified"}), 400
 
-        if tx_data.get("currency") != "NGN" or float(tx_data.get("amount", 0)) < float(payment.amount):
+        if tx_data.get("currency") != payment.currency or float(tx_data.get("amount", 0)) < float(payment.amount):
             payment.status = "failed"
             db.commit()
             return jsonify({"detail": "Payment amount or currency mismatch"}), 400
