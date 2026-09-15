@@ -75,6 +75,7 @@ def send_request(user_id):
         user_id=user_id, type="reply", title="New connection request",
         body=f"{g.current_user.full_name} wants to connect with you.",
         link=f"/u/{g.current_user.username}",
+        actor_id=me,
     ))
     db.commit()
     return jsonify({"success": True, "connection_id": conn.id})
@@ -91,6 +92,12 @@ def accept_request(connection_id):
         return jsonify({"detail": "Not authorized"}), 403
     conn.status = "accepted"
     conn.responded_at = datetime.utcnow()
+    db.add(models.Notification(
+        user_id=conn.requester_id, type="reply", title="Connection accepted",
+        body=f"{g.current_user.full_name} accepted your connection request.",
+        link=f"/u/{g.current_user.username}",
+        actor_id=g.current_user.id,
+    ))
     db.commit()
     return jsonify({"success": True})
 

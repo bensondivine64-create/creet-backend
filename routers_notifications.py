@@ -25,8 +25,12 @@ def get_notifications():
             .filter(models.Notification.user_id == g.current_user.id, models.Notification.is_read == False)  # noqa: E712
             .count()
         )
+        notif_list = []
+        for n in rows:
+            actor = db.query(models.User).filter(models.User.id == n.actor_id).first() if n.actor_id else None
+            notif_list.append(notification_to_dict(n, actor))
         return jsonify({
-            "notifications": [notification_to_dict(n) for n in rows],
+            "notifications": notif_list,
             "unread_count": unread_count,
         })
     finally:

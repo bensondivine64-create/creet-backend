@@ -101,7 +101,7 @@ def comment_to_dict(comment, author):
     }
 
 
-def notification_to_dict(n):
+def notification_to_dict(n, actor=None):
     return {
         "id": n.id,
         "type": n.type,
@@ -110,4 +110,9 @@ def notification_to_dict(n):
         "read": bool(n.is_read),
         "link": n.link,
         "created_at": n.created_at.isoformat() if n.created_at else None,
+        "actor": {
+            "username": actor.username,
+            "full_name": actor.full_name,
+            "avatar": actor.avatar,
+        } if actor else None,
     }

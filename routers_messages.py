@@ -183,6 +183,7 @@ def send_message(conv_id):
             title="New message",
             body=f"{g.current_user.full_name}: \"{content[:80]}\"",
             link=f"/inbox/{conv_id}",
+            actor_id=g.current_user.id,
         )
         db.add(notif)
 

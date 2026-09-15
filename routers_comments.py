@@ -52,6 +52,7 @@ def post_comment(listing_id):
                 title="New comment on your listing",
                 body=f"{g.current_user.full_name} commented: \"{content[:80]}\"",
                 link=f"/listing/{listing_id}",
+                actor_id=g.current_user.id,
             )
             db.add(notif)
 

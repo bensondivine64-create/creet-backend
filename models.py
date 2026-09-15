@@ -129,6 +129,7 @@ class Notification(Base):
     body = Column(Text, nullable=False)
     link = Column(String(500), nullable=True)
     is_read = Column(Boolean, default=False)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
