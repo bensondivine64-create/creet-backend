@@ -1,6 +1,6 @@
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from flask import Blueprint, request, jsonify, g
 
 import models
@@ -40,6 +40,9 @@ def signup():
     password = data.get("password", "")
     full_name = data.get("full_name", "").strip()
     role = data.get("role", "")
+    phone_number = data.get("phone_number", "").strip()
+    referral_source = data.get("referral_source", "").strip()
+    date_of_birth_str = data.get("date_of_birth", "")
     recaptcha_token = data.get("recaptcha_token")
 
     if not verify_recaptcha(recaptcha_token):
@@ -54,6 +57,16 @@ def signup():
         return jsonify({"detail": "Full name is required"}), 422
     if role not in VALID_SIGNUP_ROLES:
         return jsonify({"detail": "Invalid role"}), 400
+    if not phone_number:
+        return jsonify({"detail": "Phone number is required"}), 422
+    parsed_dob = None
+    if date_of_birth_str:
+        try:
+            parsed_dob = date.fromisoformat(date_of_birth_str)
+        except ValueError:
+            return jsonify({"detail": "Invalid date of birth"}), 422
+    else:
+        return jsonify({"detail": "Date of birth is required"}), 422
 
     db = SessionLocal()
     try:
@@ -70,6 +83,9 @@ def signup():
             password_hash=hash_password(password),
             full_name=full_name,
             role=role,
+            phone_number=phone_number,
+            referral_source=referral_source or None,
+            date_of_birth=parsed_dob,
             is_admin=is_admin,
             email_confirmed=is_admin,
         )

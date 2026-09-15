@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, JSON, Numeric
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, Text, ForeignKey, JSON, Numeric
 from sqlalchemy.sql import func
 from database import Base
 
@@ -22,6 +22,9 @@ class User(Base):
     bio = Column(Text, nullable=True)
     short_bio = Column(String(150), nullable=True)
     location = Column(String(255), nullable=True)
+    phone_number = Column(String(30), nullable=True)
+    referral_source = Column(String(100), nullable=True)
+    date_of_birth = Column(Date, nullable=True)
     country = Column(String(100), nullable=True)
     categories = Column(JSON, default=list)
     profile_completed = Column(Boolean, default=False)
