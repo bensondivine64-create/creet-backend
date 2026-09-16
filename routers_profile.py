@@ -5,6 +5,7 @@ from database import SessionLocal
 from auth import require_auth
 from serializers import user_to_dict, listing_to_dict, is_badge_verified
 from geolocation import get_client_country
+from cache import cache_get, cache_set, cache_delete
 import models
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
@@ -55,6 +56,7 @@ def update_profile():
 
         db.commit()
         db.refresh(user)
+        cache_delete(f"profile:{user.username}")
 
         return jsonify(user_to_dict(user))
     except Exception:
@@ -76,6 +78,11 @@ def _connection_count(db, user_id):
 @profile_bp.get("/<string:username>")
 def get_public_profile(username):
     viewer_country = get_client_country()
+    cache_key = f"profile:{username}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
+
     db = SessionLocal()
     try:
         user = db.query(models.User).filter(models.User.username == username).first()
@@ -89,7 +96,7 @@ def get_public_profile(username):
             .all()
         )
 
-        return jsonify({
+        payload = {
             "id": user.id,
             "username": user.username,
             "full_name": user.full_name,
@@ -105,7 +112,9 @@ def get_public_profile(username):
             "connection_count": _connection_count(db, user.id),
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "listings": [listing_to_dict(l, user, viewer_country=viewer_country) for l in listings],
-        })
+        }
+        cache_set(cache_key, payload, ttl_seconds=60)
+        return jsonify(payload)
     finally:
         db.close()
 
@@ -132,6 +141,7 @@ def upload_avatar():
     user.avatar = upload_image(f, folder="creet/avatars")
     db.commit()
     db.refresh(user)
+    cache_delete(f"profile:{user.username}")
 
     return jsonify(user_to_dict(user))
 
@@ -151,6 +161,7 @@ def upload_cover():
     user.cover_photo = upload_image(f, folder="creet/covers")
     db.commit()
     db.refresh(user)
+    cache_delete(f"profile:{user.username}")
 
     return jsonify(user_to_dict(user))
 
@@ -162,6 +173,11 @@ def get_profile_directory(role):
 
     limit = min(int(request.args.get("limit", 10)), 30)
 
+    cache_key = f"directory:{role}:{limit}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
+
     db = SessionLocal()
     try:
         users = (
@@ -171,7 +187,7 @@ def get_profile_directory(role):
             .limit(limit)
             .all()
         )
-        return jsonify({
+        payload = {
             "profiles": [
                 {
                     "username": u.username,
@@ -183,6 +199,8 @@ def get_profile_directory(role):
                 }
                 for u in users
             ]
-        })
+        }
+        cache_set(cache_key, payload, ttl_seconds=90)
+        return jsonify(payload)
     finally:
         db.close()

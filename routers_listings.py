@@ -8,6 +8,7 @@ from auth import require_auth
 from serializers import listing_to_dict
 from geolocation import get_client_country, currency_for_country
 from cache import cache_get, cache_set
+from sqlalchemy import func
 
 listings_bp = Blueprint("listings", __name__, url_prefix="/api/listings")
 
@@ -66,6 +67,79 @@ def get_listings():
         return jsonify(payload)
     finally:
         db.close()
+
+
+@listings_bp.get("/feed")
+@require_auth
+def get_personalized_feed():
+    """
+    Category-matched feed: scores listings higher when their category matches
+    the viewer's own categories, and higher still when they also come from a
+    connection. Click/view-based personalization is a future addition — this
+    is the category-match v1.
+    """
+    kind = request.args.get("type", "request")
+    limit = min(int(request.args.get("limit", 20)), 50)
+
+    db = g.db
+    me = g.current_user
+    viewer_categories = set(me.categories or [])
+
+    accepted = (
+        db.query(models.Connection)
+        .filter(
+            models.Connection.status == "accepted",
+            (models.Connection.requester_id == me.id) | (models.Connection.recipient_id == me.id),
+        )
+        .all()
+    )
+    connection_ids = {
+        (c.recipient_id if c.requester_id == me.id else c.requester_id) for c in accepted
+    }
+
+    cutoff = datetime.utcnow() - timedelta(days=6)
+    candidates = (
+        db.query(models.Listing)
+        .filter(models.Listing.kind == kind, models.Listing.status == "active")
+        .filter((models.Listing.sold_at.is_(None)) | (models.Listing.sold_at > cutoff))
+        .order_by(models.Listing.created_at.desc())
+        .limit(150)
+        .all()
+    )
+
+    if not candidates:
+        return jsonify({"listings": []})
+
+    listing_ids = [c.id for c in candidates]
+    comment_counts = dict(
+        db.query(models.Comment.listing_id, func.count(models.Comment.id))
+        .filter(models.Comment.listing_id.in_(listing_ids))
+        .group_by(models.Comment.listing_id)
+        .all()
+    )
+
+    def score(listing):
+        category_match = listing.category in viewer_categories
+        from_connection = listing.seller_id in connection_ids
+        if from_connection and category_match:
+            return 2
+        if category_match:
+            return 1
+        return 0
+
+    scored = sorted(candidates, key=lambda l: (score(l), l.created_at), reverse=True)
+    top = scored[:limit]
+
+    results = []
+    for row in top:
+        seller = db.query(models.User).filter(models.User.id == row.seller_id).first()
+        if not seller:
+            continue
+        d = listing_to_dict(row, seller)
+        d["comment_count"] = comment_counts.get(row.id, 0)
+        results.append(d)
+
+    return jsonify({"listings": results})
 
 
 @listings_bp.get("/mine")
