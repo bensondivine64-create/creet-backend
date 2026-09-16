@@ -7,6 +7,7 @@ from database import SessionLocal
 from auth import require_auth
 from serializers import listing_to_dict
 from geolocation import get_client_country, currency_for_country
+from cache import cache_get, cache_set
 
 listings_bp = Blueprint("listings", __name__, url_prefix="/api/listings")
 
@@ -23,6 +24,11 @@ def get_listings():
     offset = int(request.args.get("offset", 0))
 
     viewer_country = get_client_country()
+
+    cache_key = f"listings:{kind}:{search}:{category}:{limit}:{offset}:{viewer_country or ''}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
 
     db = SessionLocal()
     try:
@@ -55,7 +61,9 @@ def get_listings():
             if seller:
                 results.append(listing_to_dict(row, seller, viewer_country=viewer_country))
 
-        return jsonify({"listings": results, "total": total})
+        payload = {"listings": results, "total": total}
+        cache_set(cache_key, payload, ttl_seconds=45)
+        return jsonify(payload)
     finally:
         db.close()
 

@@ -8,3 +8,4 @@ requests
 gunicorn
 google-auth
 cloudinary
+upstash-redis
