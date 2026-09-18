@@ -29,6 +29,8 @@ class User(Base):
     categories = Column(JSON, default=list)
     profile_completed = Column(Boolean, default=False)
     account_status = Column(String(20), default="active")  # active | suspended
+    last_active = Column(DateTime, nullable=True)
+    hide_online_status = Column(Boolean, default=False)
     notify_messages = Column(Boolean, default=True)
     notify_announcements = Column(Boolean, default=True)
     notify_listing_activity = Column(Boolean, default=True)
@@ -154,7 +156,8 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    content = Column(Text, nullable=False)
+    content = Column(Text, nullable=True)
+    image_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 

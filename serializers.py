@@ -40,8 +40,19 @@ def user_to_dict(user):
         "notify_announcements": bool(user.notify_announcements) if user.notify_announcements is not None else True,
         "notify_listing_activity": bool(user.notify_listing_activity) if user.notify_listing_activity is not None else True,
         "onboarding_extra": user.onboarding_extra or {},
+        "hide_online_status": bool(user.hide_online_status) if user.hide_online_status is not None else False,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
+
+
+ONLINE_THRESHOLD_SECONDS = 180
+
+
+def presence_for(user):
+    if user.hide_online_status or not user.last_active:
+        return {"last_active": None, "is_online": False}
+    online = (datetime.utcnow() - user.last_active).total_seconds() < ONLINE_THRESHOLD_SECONDS
+    return {"last_active": user.last_active.isoformat(), "is_online": online}
 
 
 def listing_to_dict(listing, seller, viewer_country=None):

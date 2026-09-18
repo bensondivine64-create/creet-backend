@@ -2,12 +2,19 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
 import models
-from serializers import is_badge_verified
+from serializers import is_badge_verified, presence_for
 from database import SessionLocal
 from auth import require_auth
 from routers_blocks import is_blocked_either_way
+from cloud_storage import upload_image
 
 messages_bp = Blueprint("messages", __name__, url_prefix="/api/conversations")
+
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+
+
+def _allowed_image(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
 def other_user_id(conv, my_id):
@@ -28,7 +35,6 @@ def set_my_last_read(conv, my_id, when):
 @messages_bp.get("")
 @require_auth
 def get_conversations():
-    from flask import request
     limit = min(int(request.args.get("limit", 30)), 50)
     offset = int(request.args.get("offset", 0))
     db = SessionLocal()
@@ -69,6 +75,11 @@ def get_conversations():
             if last_read:
                 unread_query = unread_query.filter(models.Message.created_at > last_read)
             unread_count = unread_query.count()
+
+            last_message_preview = last_msg.content if (last_msg and last_msg.content) else (
+                "📷 Photo" if (last_msg and last_msg.image_url) else ""
+            )
+
             results.append({
                 "id": conv.id,
                 "participant": {
@@ -76,10 +87,11 @@ def get_conversations():
                     "full_name": other.full_name,
                     "avatar": other.avatar,
                     "verified": is_badge_verified(other),
+                    **presence_for(other),
                 },
                 "listing_id": conv.listing_id,
                 "listing_title": listing_title,
-                "last_message": last_msg.content if last_msg else "",
+                "last_message": last_message_preview,
                 "last_message_at": last_msg.created_at.isoformat() if last_msg and last_msg.created_at else conv.created_at.isoformat(),
                 "unread_count": unread_count,
             })
@@ -142,6 +154,8 @@ def get_messages(conv_id):
         set_my_last_read(conv, g.current_user.id, datetime.utcnow())
         db.commit()
 
+        other = db.query(models.User).filter(models.User.id == other_user_id(conv, g.current_user.id)).first()
+
         rows = (
             db.query(models.Message)
             .filter(models.Message.conversation_id == conv_id)
@@ -155,10 +169,22 @@ def get_messages(conv_id):
                 "id": m.id,
                 "conversation_id": m.conversation_id,
                 "sender_username": sender.username if sender else "",
-                "content": m.content,
+                "content": m.content or "",
+                "image_url": m.image_url,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             })
-        return jsonify({"messages": results})
+
+        participant = None
+        if other:
+            participant = {
+                "username": other.username,
+                "full_name": other.full_name,
+                "avatar": other.avatar,
+                "verified": is_badge_verified(other),
+                **presence_for(other),
+            }
+
+        return jsonify({"messages": results, "participant": participant})
     finally:
         db.close()
 
@@ -184,9 +210,8 @@ def send_message(conv_id):
         msg = models.Message(conversation_id=conv_id, sender_id=g.current_user.id, content=content)
         db.add(msg)
 
-        recipient_id = other_user_id(conv, g.current_user.id)
         notif = models.Notification(
-            user_id=recipient_id,
+            user_id=other_id,
             type="reply",
             title="New message",
             body=f"{g.current_user.full_name}: \"{content[:80]}\"",
@@ -203,7 +228,58 @@ def send_message(conv_id):
                 "id": msg.id,
                 "conversation_id": msg.conversation_id,
                 "sender_username": g.current_user.username,
-                "content": msg.content,
+                "content": msg.content or "",
+                "image_url": msg.image_url,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            },
+        })
+    finally:
+        db.close()
+
+
+@messages_bp.post("/<int:conv_id>/messages/image")
+@require_auth
+def send_message_image(conv_id):
+    f = request.files.get("image")
+    if not f or not f.filename:
+        return jsonify({"detail": "No image provided"}), 422
+    if not _allowed_image(f.filename):
+        return jsonify({"detail": "Allowed formats: jpg, jpeg, png, webp"}), 422
+
+    db = SessionLocal()
+    try:
+        conv = db.query(models.Conversation).filter(models.Conversation.id == conv_id).first()
+        if not conv or g.current_user.id not in (conv.user_a_id, conv.user_b_id):
+            return jsonify({"detail": "Conversation not found"}), 404
+
+        other_id = other_user_id(conv, g.current_user.id)
+        if is_blocked_either_way(db, g.current_user.id, other_id):
+            return jsonify({"detail": "You can't message this user"}), 403
+
+        image_url = upload_image(f, folder="creet/messages")
+        msg = models.Message(conversation_id=conv_id, sender_id=g.current_user.id, content="", image_url=image_url)
+        db.add(msg)
+
+        notif = models.Notification(
+            user_id=other_id,
+            type="reply",
+            title="New message",
+            body=f"{g.current_user.full_name} sent a photo",
+            link=f"/inbox/{conv_id}",
+            actor_id=g.current_user.id,
+        )
+        db.add(notif)
+
+        db.commit()
+        db.refresh(msg)
+        return jsonify({
+            "success": True,
+            "message": {
+                "id": msg.id,
+                "conversation_id": msg.conversation_id,
+                "sender_username": g.current_user.username,
+                "content": msg.content or "",
+                "image_url": msg.image_url,
                 "created_at": msg.created_at.isoformat() if msg.created_at else None,
             },
         })

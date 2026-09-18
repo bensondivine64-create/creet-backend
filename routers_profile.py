@@ -51,6 +51,8 @@ def update_profile():
             user.categories = data["categories"][:10]
         if "onboarding_extra" in data and isinstance(data["onboarding_extra"], dict):
             user.onboarding_extra = data["onboarding_extra"]
+        if "hide_online_status" in data:
+            user.hide_online_status = bool(data["hide_online_status"])
 
         user.profile_completed = True
 

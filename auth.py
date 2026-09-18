@@ -89,6 +89,11 @@ def require_auth(fn):
                         db.commit()
                 except Exception:
                     pass
+            now = datetime.utcnow()
+            if not user.last_active or (now - user.last_active).total_seconds() > 60:
+                user.last_active = now
+                db.commit()
+
             if user.account_status == "suspended":
                 if user.suspension_until and user.suspension_until <= datetime.utcnow():
                     user.account_status = "active"
