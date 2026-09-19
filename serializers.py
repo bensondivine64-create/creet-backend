@@ -41,6 +41,10 @@ def user_to_dict(user):
         "notify_listing_activity": bool(user.notify_listing_activity) if user.notify_listing_activity is not None else True,
         "onboarding_extra": user.onboarding_extra or {},
         "hide_online_status": bool(user.hide_online_status) if user.hide_online_status is not None else False,
+        "is_recruiter": bool(
+            user.role == "buyer"
+            and (user.onboarding_extra or {}).get("buyer_freelancer_type") == "Recruiter — hiring for a company"
+        ),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 

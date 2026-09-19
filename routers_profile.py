@@ -112,6 +112,10 @@ def get_public_profile(username):
             "is_premium": bool(user.is_premium),
             "verified_badge": is_badge_verified(user),
             "connection_count": _connection_count(db, user.id),
+            "is_recruiter": bool(
+                user.role == "buyer"
+                and (user.onboarding_extra or {}).get("buyer_freelancer_type") == "Recruiter — hiring for a company"
+            ),
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "listings": [listing_to_dict(l, user, viewer_country=viewer_country) for l in listings],
         }
