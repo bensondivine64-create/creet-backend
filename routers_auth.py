@@ -391,11 +391,65 @@ def change_password():
 def delete_account():
     db = g.db
     user = g.current_user
+
     data = request.get_json(force=True) or {}
 
     password = data.get("password", "")
     if not verify_password(password, user.password_hash):
         return jsonify({"detail": "Incorrect password"}), 401
+
+    uid = user.id
+
+    listing_ids = [
+        row.id for row in db.query(models.Listing.id).filter(models.Listing.seller_id == uid).all()
+    ]
+
+    conversation_ids = [
+        row.id for row in db.query(models.Conversation.id).filter(
+            (models.Conversation.user_a_id == uid) | (models.Conversation.user_b_id == uid)
+        ).all()
+    ]
+
+    if conversation_ids:
+        db.query(models.Message).filter(models.Message.conversation_id.in_(conversation_ids)).delete(synchronize_session=False)
+    db.query(models.Message).filter(models.Message.sender_id == uid).delete(synchronize_session=False)
+
+    db.query(models.Conversation).filter(
+        (models.Conversation.user_a_id == uid) | (models.Conversation.user_b_id == uid)
+    ).delete(synchronize_session=False)
+
+    if listing_ids:
+        db.query(models.Conversation).filter(models.Conversation.listing_id.in_(listing_ids)).update(
+            {models.Conversation.listing_id: None}, synchronize_session=False
+        )
+
+    db.query(models.Comment).filter(models.Comment.author_id == uid).delete(synchronize_session=False)
+    if listing_ids:
+        db.query(models.Comment).filter(models.Comment.listing_id.in_(listing_ids)).delete(synchronize_session=False)
+
+    db.query(models.Review).filter(models.Review.reviewer_id == uid).delete(synchronize_session=False)
+    if listing_ids:
+        db.query(models.Review).filter(models.Review.listing_id.in_(listing_ids)).delete(synchronize_session=False)
+
+    db.query(models.Notification).filter(
+        (models.Notification.user_id == uid) | (models.Notification.actor_id == uid)
+    ).delete(synchronize_session=False)
+
+    db.query(models.Connection).filter(
+        (models.Connection.requester_id == uid) | (models.Connection.recipient_id == uid)
+    ).delete(synchronize_session=False)
+
+    db.query(models.Block).filter(
+        (models.Block.blocker_id == uid) | (models.Block.blocked_id == uid)
+    ).delete(synchronize_session=False)
+
+    db.query(models.Report).filter(models.Report.reporter_id == uid).delete(synchronize_session=False)
+
+    db.query(models.PremiumPayment).filter(models.PremiumPayment.user_id == uid).delete(synchronize_session=False)
+
+    db.query(models.AdminAiLog).filter(models.AdminAiLog.admin_id == uid).delete(synchronize_session=False)
+
+    db.query(models.Listing).filter(models.Listing.seller_id == uid).delete(synchronize_session=False)
 
     db.delete(user)
     db.commit()
