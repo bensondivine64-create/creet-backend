@@ -187,6 +187,7 @@ def google_login():
     db = SessionLocal()
     try:
         user = db.query(models.User).filter(models.User.email == email).first()
+        is_new_user = False
 
         if not user:
             if role not in VALID_SIGNUP_ROLES:
@@ -206,9 +207,15 @@ def google_login():
             db.add(user)
             db.commit()
             db.refresh(user)
+            is_new_user = True
 
         token = create_token(user.id, user.role)
-        resp = make_response(jsonify({"access_token": token, "user": user_to_dict(user)}))
+        body = user_to_dict(user)
+        # Signals to the frontend that this account still needs phone/DOB/referral
+        # collected — fields the password-based signup form gathers but Google
+        # sign-in bypasses. Only true immediately after account creation.
+        body["needs_signup_details"] = is_new_user and not user.phone_number
+        resp = make_response(jsonify({"access_token": token, "user": body}))
         return _set_session_cookie(resp, token)
     finally:
         db.close()
@@ -218,6 +225,34 @@ def google_login():
 @require_auth
 def get_me():
     return jsonify(user_to_dict(g.current_user))
+
+
+@auth_bp.post("/me/complete-signup-details")
+@require_auth
+def complete_signup_details():
+    db = g.db
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+
+    phone_number = data.get("phone_number", "").strip()
+    referral_source = data.get("referral_source", "").strip()
+    date_of_birth_str = data.get("date_of_birth", "")
+
+    if not phone_number:
+        return jsonify({"detail": "Phone number is required"}), 422
+    if not date_of_birth_str:
+        return jsonify({"detail": "Date of birth is required"}), 422
+    try:
+        parsed_dob = date.fromisoformat(date_of_birth_str)
+    except ValueError:
+        return jsonify({"detail": "Invalid date of birth"}), 422
+
+    user.phone_number = phone_number
+    user.referral_source = referral_source or None
+    user.date_of_birth = parsed_dob
+    db.commit()
+
+    return jsonify(user_to_dict(user))
 
 
 @auth_bp.post("/logout")
