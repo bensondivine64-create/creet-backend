@@ -6,9 +6,9 @@ from database import SessionLocal
 import models
 from email_util import send_email
 
-CHECK_INTERVAL_SECONDS = 60
-MIN_AGE_MINUTES = 5
-MAX_AGE_MINUTES = 30  # don't email accounts that are old and just now getting checked (e.g. after a restart)
+CHECK_INTERVAL_SECONDS = 30
+MIN_AGE_MINUTES = 2
+MAX_AGE_MINUTES = 15  # don't email accounts that are old and just now getting checked (e.g. after a restart)
 
 
 def _tips_for_role(role: str) -> str:
@@ -83,13 +83,8 @@ def _run_loop():
                     )
                     .all()
                 )
+                print(f"[WELCOME EMAIL] checking {len(candidates)} candidate(s)")
                 for user in candidates:
-                    stayed = (
-                        user.last_active
-                        and user.last_active >= user.created_at + timedelta(minutes=MIN_AGE_MINUTES)
-                    )
-                    if not stayed:
-                        continue
                     try:
                         _send_welcome_email(user)
                     except Exception as e:
