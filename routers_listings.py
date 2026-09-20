@@ -122,14 +122,20 @@ def get_personalized_feed():
         .all()
     )
 
+    interest_weights = me.interest_weights or {}
+
     def score(listing):
         category_match = listing.category in viewer_categories
+        interest_score = interest_weights.get(listing.category, 0)
         from_connection = listing.seller_id in connection_ids
-        if from_connection and category_match:
-            return 2
+
+        total = 0
         if category_match:
-            return 1
-        return 0
+            total += 2
+        total += min(interest_score, 10)  # cap so one heavily-viewed category can't fully dominate
+        if from_connection and (category_match or interest_score > 0):
+            total += 3
+        return total
 
     scored = sorted(candidates, key=lambda l: (score(l), l.created_at), reverse=True)
     top = scored[:limit]
@@ -161,6 +167,26 @@ def get_my_listings():
         return jsonify({"listings": results, "total": len(results)})
     finally:
         db.close()
+
+
+def _bump_interest(user, category, weight):
+    if not category:
+        return
+    weights = dict(user.interest_weights or {})
+    weights[category] = weights.get(category, 0) + weight
+    user.interest_weights = weights
+
+
+@listings_bp.post("/<int:listing_id>/track-view")
+@require_auth
+def track_listing_view(listing_id):
+    db = g.db
+    listing = db.query(models.Listing).filter(models.Listing.id == listing_id).first()
+    if not listing:
+        return jsonify({"success": True})  # silently no-op, this is a fire-and-forget signal
+    _bump_interest(g.current_user, listing.category, 1)
+    db.commit()
+    return jsonify({"success": True})
 
 
 @listings_bp.get("/<int:listing_id>")

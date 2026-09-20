@@ -135,6 +135,14 @@ def start_conversation():
 
         conv = models.Conversation(user_a_id=me, user_b_id=seller_id, listing_id=listing_id)
         db.add(conv)
+
+        # Messaging about a listing is a stronger interest signal than just viewing it.
+        buyer = db.query(models.User).filter(models.User.id == me).first()
+        if buyer and listing.category:
+            weights = dict(buyer.interest_weights or {})
+            weights[listing.category] = weights.get(listing.category, 0) + 3
+            buyer.interest_weights = weights
+
         db.commit()
         db.refresh(conv)
         return jsonify({"conversation_id": conv.id})

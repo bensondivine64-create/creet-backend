@@ -36,6 +36,7 @@ class User(Base):
     notify_announcements = Column(Boolean, default=True)
     notify_listing_activity = Column(Boolean, default=True)
     onboarding_extra = Column(JSON, default=dict)
+    interest_weights = Column(JSON, default=dict)
     suspension_type = Column(String(10), nullable=True)  # temporary | serious
     suspension_until = Column(DateTime, nullable=True)
     suspension_reason = Column(Text, nullable=True)
