@@ -16,6 +16,7 @@ from routers_connections import connections_bp
 from routers_payments import payments_bp
 from routers_ads import ads_bp
 from routers_blocks import blocks_bp
+from routers_network import network_bp
 from welcome_email import start_welcome_email_scheduler
 
 Base.metadata.create_all(bind=engine)
@@ -36,6 +37,7 @@ app.register_blueprint(connections_bp)
 app.register_blueprint(payments_bp)
 app.register_blueprint(ads_bp)
 app.register_blueprint(blocks_bp)
+app.register_blueprint(network_bp)
 
 
 @app.get("/api/health")

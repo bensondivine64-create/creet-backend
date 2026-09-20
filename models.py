@@ -81,6 +81,25 @@ class Connection(Base):
     responded_at = Column(DateTime, nullable=True)
 
 
+class Follow(Base):
+    __tablename__ = "follows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    follower_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    followed_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    image_url = Column(String(500), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class OtpCode(Base):
     __tablename__ = "otp_codes"
 
