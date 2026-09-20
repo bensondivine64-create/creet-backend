@@ -12,8 +12,8 @@ from sqlalchemy import func
 
 listings_bp = Blueprint("listings", __name__, url_prefix="/api/listings")
 
-ROLE_FOR_KIND = {"gig": "freelancer", "product": "vendor", "request": "buyer"}
-EDITABLE_KINDS = {"product", "request", "gig"}
+ROLE_FOR_KIND = {"gig": "freelancer", "product": "vendor", "request": "buyer", "hiring": "buyer"}
+EDITABLE_KINDS = {"product", "request", "gig", "hiring"}
 
 
 @listings_bp.get("")
@@ -182,6 +182,11 @@ def _create_listing(kind, required_fields):
         if g.current_user.role != expected_role:
             return jsonify({"detail": f"Only {expected_role}s can post this"}), 403
 
+        if kind == "hiring":
+            is_recruiter = (g.current_user.onboarding_extra or {}).get("buyer_freelancer_type") == "Recruiter — hiring for a company"
+            if not is_recruiter:
+                return jsonify({"detail": "Only recruiters can post hiring listings"}), 403
+
         data = request.get_json(force=True) or {}
         for field in required_fields:
             if field not in data or data[field] in (None, ""):
@@ -244,6 +249,12 @@ def create_product():
 @require_auth
 def create_request():
     return _create_listing("request", ["title", "description", "category"])
+
+
+@listings_bp.post("/hiring")
+@require_auth
+def create_hiring():
+    return _create_listing("hiring", ["title", "description", "category"])
 
 
 def _get_owned_listing(db, listing_id):

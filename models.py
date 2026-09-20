@@ -97,7 +97,7 @@ class Listing(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    kind = Column(String(10), nullable=False)  # gig | product | request
+    kind = Column(String(10), nullable=False)  # gig | product | request | hiring
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     category = Column(String(100), nullable=False)
