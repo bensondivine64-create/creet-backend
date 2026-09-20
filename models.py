@@ -31,6 +31,7 @@ class User(Base):
     account_status = Column(String(20), default="active")  # active | suspended
     last_active = Column(DateTime, nullable=True)
     hide_online_status = Column(Boolean, default=False)
+    welcome_email_sent = Column(Boolean, default=False)
     notify_messages = Column(Boolean, default=True)
     notify_announcements = Column(Boolean, default=True)
     notify_listing_activity = Column(Boolean, default=True)

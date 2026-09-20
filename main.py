@@ -17,6 +17,7 @@ from routers_payments import payments_bp
 from routers_ads import ads_bp
 from routers_reviews import reviews_bp
 from routers_blocks import blocks_bp
+from welcome_email import start_welcome_email_scheduler
 
 Base.metadata.create_all(bind=engine)
 
@@ -45,4 +46,7 @@ def health():
 
 
 if __name__ == "__main__":
+    import os
+    if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        start_welcome_email_scheduler()
     app.run(host="0.0.0.0", port=8000, debug=True)
