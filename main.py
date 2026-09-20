@@ -43,8 +43,9 @@ def health():
     return {"status": "ok"}
 
 
+import os
+if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+    start_welcome_email_scheduler()
+
 if __name__ == "__main__":
-    import os
-    if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
-        start_welcome_email_scheduler()
     app.run(host="0.0.0.0", port=8000, debug=True)

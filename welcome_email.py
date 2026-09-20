@@ -8,7 +8,6 @@ from email_util import send_email
 
 CHECK_INTERVAL_SECONDS = 30
 MIN_AGE_MINUTES = 2
-MAX_AGE_MINUTES = 15  # don't email accounts that are old and just now getting checked (e.g. after a restart)
 
 
 def _tips_for_role(role: str) -> str:
@@ -79,7 +78,6 @@ def _run_loop():
                     .filter(
                         models.User.welcome_email_sent.is_(False),
                         models.User.created_at <= now - timedelta(minutes=MIN_AGE_MINUTES),
-                        models.User.created_at >= now - timedelta(minutes=MAX_AGE_MINUTES),
                     )
                     .all()
                 )
