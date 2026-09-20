@@ -34,8 +34,11 @@ def get_listings():
     db = SessionLocal()
     try:
         cutoff = datetime.utcnow() - timedelta(days=6)
+        # Requests tab shows both plain requests and recruiter hiring posts,
+        # mixed together (hiring posts are visually tagged on the frontend).
+        kind_filter = models.Listing.kind.in_(["request", "hiring"]) if kind == "request" else models.Listing.kind == kind
         query = db.query(models.Listing).filter(
-            models.Listing.kind == kind, models.Listing.status == "active"
+            kind_filter, models.Listing.status == "active"
         )
         query = query.filter(
             (models.Listing.sold_at.is_(None)) | (models.Listing.sold_at > cutoff)
@@ -98,9 +101,10 @@ def get_personalized_feed():
     }
 
     cutoff = datetime.utcnow() - timedelta(days=6)
+    feed_kind_filter = models.Listing.kind.in_(["request", "hiring"]) if kind == "request" else models.Listing.kind == kind
     candidates = (
         db.query(models.Listing)
-        .filter(models.Listing.kind == kind, models.Listing.status == "active")
+        .filter(feed_kind_filter, models.Listing.status == "active")
         .filter((models.Listing.sold_at.is_(None)) | (models.Listing.sold_at > cutoff))
         .order_by(models.Listing.created_at.desc())
         .limit(150)
