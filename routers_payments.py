@@ -21,6 +21,16 @@ FLUTTERWAVE_SUPPORTED_CURRENCIES = {
     "NGN", "RWF", "SLL", "ZAR", "TZS", "UGX", "USD", "XOF", "ZMW",
 }
 
+# These currencies are conventionally charged as whole numbers by payment
+# processors — no minor/decimal unit in everyday use.
+ZERO_DECIMAL_CURRENCIES = {"XAF", "XOF", "RWF"}
+
+
+def _round_for_currency(amount, currency):
+    if currency in ZERO_DECIMAL_CURRENCIES:
+        return round(amount)
+    return round(amount, 2)
+
 PLAN_AMOUNTS_NGN = {
     "monthly": 2000,
     "three_months": 5500,
@@ -60,7 +70,7 @@ def premium_quote():
                 amount = amount_ngn
             else:
                 converted = convert_currency(amount_ngn, "NGN", charge_currency)
-                amount = converted if converted is not None else amount_ngn
+                amount = _round_for_currency(converted, charge_currency) if converted is not None else amount_ngn
             quotes[plan] = amount
 
         return jsonify({
@@ -94,12 +104,10 @@ def initiate_premium():
         else:
             converted = convert_currency(amount_ngn, "NGN", charge_currency)
             if converted is None:
-                # Conversion service unreachable — fall back to NGN, which is
-                # always guaranteed to work, rather than fail the checkout.
                 charge_currency = "NGN"
                 amount = amount_ngn
             else:
-                amount = converted
+                amount = _round_for_currency(converted, charge_currency)
 
         payment = models.PremiumPayment(
             user_id=user.id,
