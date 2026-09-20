@@ -15,7 +15,6 @@ from routers_settings import settings_bp
 from routers_connections import connections_bp
 from routers_payments import payments_bp
 from routers_ads import ads_bp
-from routers_reviews import reviews_bp
 from routers_blocks import blocks_bp
 from welcome_email import start_welcome_email_scheduler
 
@@ -36,7 +35,6 @@ app.register_blueprint(settings_bp)
 app.register_blueprint(connections_bp)
 app.register_blueprint(payments_bp)
 app.register_blueprint(ads_bp)
-app.register_blueprint(reviews_bp)
 app.register_blueprint(blocks_bp)
 
 

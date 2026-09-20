@@ -427,10 +427,6 @@ def delete_account():
     if listing_ids:
         db.query(models.Comment).filter(models.Comment.listing_id.in_(listing_ids)).delete(synchronize_session=False)
 
-    db.query(models.Review).filter(models.Review.reviewer_id == uid).delete(synchronize_session=False)
-    if listing_ids:
-        db.query(models.Review).filter(models.Review.listing_id.in_(listing_ids)).delete(synchronize_session=False)
-
     db.query(models.Notification).filter(
         (models.Notification.user_id == uid) | (models.Notification.actor_id == uid)
     ).delete(synchronize_session=False)

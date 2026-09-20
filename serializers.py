@@ -89,8 +89,6 @@ def listing_to_dict(listing, seller, viewer_country=None):
             "avatar": seller.avatar,
             "verified": is_badge_verified(seller),
         },
-        "rating_avg": float(listing.rating_avg or 0),
-        "rating_count": listing.rating_count or 0,
         "created_at": listing.created_at.isoformat() if listing.created_at else None,
     }
     if listing.kind == "gig":

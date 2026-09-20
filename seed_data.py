@@ -76,8 +76,6 @@ def run():
                 price=gig["price"],
                 currency="NGN",
                 delivery_days=gig["delivery_days"],
-                rating_avg=4.5 + (i % 5) * 0.1,
-                rating_count=10 + i * 7,
             )
             db.add(listing)
             print(f"Created gig: {gig['title']}")
@@ -97,8 +95,6 @@ def run():
                 currency="NGN",
                 condition_status=product["condition"],
                 stock=product["stock"],
-                rating_avg=4.2 + (i % 5) * 0.1,
-                rating_count=5 + i * 4,
             )
             db.add(listing)
             print(f"Created product: {product['title']}")
