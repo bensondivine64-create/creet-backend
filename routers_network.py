@@ -5,6 +5,7 @@ from database import SessionLocal
 from auth import require_auth
 from serializers import is_badge_verified
 from routers_blocks import is_blocked_either_way
+from cloud_storage import upload_image
 
 network_bp = Blueprint("network", __name__, url_prefix="/api")
 
@@ -107,6 +108,26 @@ def follow_status(user_id):
         "follower_count": follower_count,
         "following_count": following_count,
     })
+
+
+ALLOWED_POST_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+
+
+def _allowed_post_image(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_POST_IMAGE_EXTENSIONS
+
+
+@network_bp.post("/posts/upload-image")
+@require_auth
+def upload_post_image():
+    f = request.files.get("image")
+    if not f or not f.filename:
+        return jsonify({"detail": "No image provided"}), 422
+    if not _allowed_post_image(f.filename):
+        return jsonify({"detail": "Allowed formats: jpg, jpeg, png, webp"}), 422
+
+    url = upload_image(f, folder="creet/posts")
+    return jsonify({"url": url})
 
 
 @network_bp.post("/posts")
