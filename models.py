@@ -100,6 +100,25 @@ class Post(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class PostLike(Base):
+    __tablename__ = "post_likes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class PostComment(Base):
+    __tablename__ = "post_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class OtpCode(Base):
     __tablename__ = "otp_codes"
 
