@@ -277,3 +277,193 @@ def convo_pending_category(db, convo):
         .first()
     )
     return _detect_immediate_category(first.content) if first else "general" or "general"
+
+
+# --- Admin: knowledge base management ---
+
+@support_bp.get("/admin/articles")
+@require_auth
+def list_articles():
+    from auth import require_admin
+    if not g.current_user.is_admin:
+        return jsonify({"detail": "Admin access required"}), 403
+    db = g.db
+    articles = db.query(models.KnowledgeArticle).order_by(models.KnowledgeArticle.category, models.KnowledgeArticle.title).all()
+    return jsonify({
+        "articles": [
+            {"id": a.id, "category": a.category, "title": a.title, "content": a.content,
+             "updated_at": a.updated_at.isoformat() if a.updated_at else None}
+            for a in articles
+        ]
+    })
+
+
+@support_bp.post("/admin/articles")
+@require_auth
+def create_article():
+    if not g.current_user.is_admin:
+        return jsonify({"detail": "Admin access required"}), 403
+    db = g.db
+    data = request.get_json(force=True) or {}
+    category = (data.get("category") or "").strip()
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+    if not category or not title or not content:
+        return jsonify({"detail": "category, title, and content are required"}), 422
+    article = models.KnowledgeArticle(category=category, title=title, content=content)
+    db.add(article)
+    db.commit()
+    db.refresh(article)
+    return jsonify({"id": article.id})
+
+
+@support_bp.put("/admin/articles/<int:article_id>")
+@require_auth
+def update_article(article_id):
+    if not g.current_user.is_admin:
+        return jsonify({"detail": "Admin access required"}), 403
+    db = g.db
+    article = db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.id == article_id).first()
+    if not article:
+        return jsonify({"detail": "Article not found"}), 404
+    data = request.get_json(force=True) or {}
+    if "category" in data:
+        article.category = data["category"].strip()
+    if "title" in data:
+        article.title = data["title"].strip()
+    if "content" in data:
+        article.content = data["content"].strip()
+    db.commit()
+    return jsonify({"success": True})
+
+
+@support_bp.delete("/admin/articles/<int:article_id>")
+@require_auth
+def delete_article(article_id):
+    if not g.current_user.is_admin:
+        return jsonify({"detail": "Admin access required"}), 403
+    db = g.db
+    article = db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.id == article_id).first()
+    if not article:
+        return jsonify({"detail": "Article not found"}), 404
+    db.delete(article)
+    db.commit()
+    return jsonify({"success": True})
+
+
+# --- Admin: ticket/conversation management ---
+
+def _ticket_to_dict(t, user, agent):
+    return {
+        "id": t.id,
+        "user": {"id": user.id, "username": user.username, "full_name": user.full_name} if user else None,
+        "category": t.category,
+        "priority": t.priority,
+        "status": t.status,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+        "assigned_agent": {"id": agent.id, "full_name": agent.full_name} if agent else None,
+        "ai_summary": t.ai_summary,
+        "conversation_id": t.conversation_id,
+    }
+
+
+@support_bp.get("/admin/tickets")
+@require_auth
+def list_tickets():
+    if not g.current_user.is_admin:
+        return jsonify({"detail": "Admin access required"}), 403
+    db = g.db
+    status_filter = request.args.get("status")
+    query = db.query(models.SupportTicket)
+    if status_filter:
+        query = query.filter(models.SupportTicket.status == status_filter)
+    tickets = query.order_by(models.SupportTicket.created_at.desc()).all()
+
+    results = []
+    for t in tickets:
+        user = db.query(models.User).filter(models.User.id == t.user_id).first()
+        agent = db.query(models.User).filter(models.User.id == t.assigned_agent_id).first() if t.assigned_agent_id else None
+        results.append(_ticket_to_dict(t, user, agent))
+    return jsonify({"tickets": results})
+
+
+@support_bp.get("/admin/tickets/<int:ticket_id>")
+@require_auth
+def get_ticket_detail(ticket_id):
+    if not g.current_user.is_admin:
+        return jsonify({"detail": "Admin access required"}), 403
+    db = g.db
+    t = db.query(models.SupportTicket).filter(models.SupportTicket.id == ticket_id).first()
+    if not t:
+        return jsonify({"detail": "Ticket not found"}), 404
+    user = db.query(models.User).filter(models.User.id == t.user_id).first()
+    agent = db.query(models.User).filter(models.User.id == t.assigned_agent_id).first() if t.assigned_agent_id else None
+
+    msgs = (
+        db.query(models.SupportMessage)
+        .filter(models.SupportMessage.conversation_id == t.conversation_id)
+        .order_by(models.SupportMessage.created_at.asc())
+        .all()
+    )
+
+    data = _ticket_to_dict(t, user, agent)
+    data["internal_notes"] = t.internal_notes
+    data["troubleshooting_attempted"] = t.troubleshooting_attempted
+    data["messages"] = [
+        {"id": m.id, "sender_type": m.sender_type, "content": m.content, "created_at": m.created_at.isoformat()}
+        for m in msgs
+    ]
+    return jsonify(data)
+
+
+@support_bp.put("/admin/tickets/<int:ticket_id>")
+@require_auth
+def update_ticket(ticket_id):
+    if not g.current_user.is_admin:
+        return jsonify({"detail": "Admin access required"}), 403
+    db = g.db
+    t = db.query(models.SupportTicket).filter(models.SupportTicket.id == ticket_id).first()
+    if not t:
+        return jsonify({"detail": "Ticket not found"}), 404
+    data = request.get_json(force=True) or {}
+
+    if "status" in data:
+        t.status = data["status"]
+    if "priority" in data:
+        t.priority = data["priority"]
+    if "assigned_agent_id" in data:
+        t.assigned_agent_id = data["assigned_agent_id"]
+    if "internal_notes" in data:
+        t.internal_notes = data["internal_notes"]
+
+    db.commit()
+    return jsonify({"success": True})
+
+
+@support_bp.post("/admin/tickets/<int:ticket_id>/reply")
+@require_auth
+def agent_reply(ticket_id):
+    if not g.current_user.is_admin:
+        return jsonify({"detail": "Admin access required"}), 403
+    db = g.db
+    t = db.query(models.SupportTicket).filter(models.SupportTicket.id == ticket_id).first()
+    if not t:
+        return jsonify({"detail": "Ticket not found"}), 404
+    data = request.get_json(force=True) or {}
+    content = (data.get("content") or "").strip()
+    if not content:
+        return jsonify({"detail": "content is required"}), 422
+
+    _save_message(db, t.conversation_id, "agent", content)
+
+    convo = db.query(models.SupportConversation).filter(models.SupportConversation.id == t.conversation_id).first()
+    if convo:
+        convo.status = "human"
+        db.commit()
+
+    if t.status == "open":
+        t.status = "in_progress"
+        db.commit()
+
+    return jsonify({"success": True})
