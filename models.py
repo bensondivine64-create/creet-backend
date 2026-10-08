@@ -248,3 +248,51 @@ class Block(Base):
     blocker_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     blocked_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class SupportConversation(Base):
+    __tablename__ = "support_conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(20), default="ai")  # ai | human | resolved
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class SupportMessage(Base):
+    __tablename__ = "support_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("support_conversations.id"), nullable=False)
+    sender_type = Column(String(10), nullable=False)  # user | ai | agent | system
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    conversation_id = Column(Integer, ForeignKey("support_conversations.id"), nullable=False)
+    category = Column(String(50), nullable=True)
+    subject = Column(String(255), nullable=True)
+    status = Column(String(20), default="open")  # open | in_progress | waiting_for_user | resolved
+    priority = Column(String(10), default="normal")  # low | normal | high
+    assigned_agent_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    ai_summary = Column(Text, nullable=True)
+    troubleshooting_attempted = Column(Text, nullable=True)
+    internal_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class KnowledgeArticle(Base):
+    __tablename__ = "knowledge_articles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String(50), nullable=False)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
