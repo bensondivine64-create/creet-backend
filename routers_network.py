@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 
 import models
+from sqlalchemy import func
 from database import SessionLocal
 from auth import require_auth
 from serializers import is_badge_verified
@@ -10,19 +11,20 @@ from cloud_storage import upload_image
 network_bp = Blueprint("network", __name__, url_prefix="/api")
 
 
-def _post_to_dict(post, author, db=None, viewer_id=None):
+def _post_to_dict(post, author, db=None, viewer_id=None, counts=None):
     like_count = 0
     comment_count = 0
     liked_by_me = False
-    if db is not None:
+    if counts is not None:
+        like_count, comment_count, liked_by_me = counts
+    elif db is not None:
         like_count = db.query(models.PostLike).filter(models.PostLike.post_id == post.id).count()
         comment_count = db.query(models.PostComment).filter(models.PostComment.post_id == post.id).count()
         if viewer_id:
             liked_by_me = (
                 db.query(models.PostLike)
                 .filter(models.PostLike.post_id == post.id, models.PostLike.user_id == viewer_id)
-                .first()
-                is not None
+                .first() is not None
             )
     return {
         "id": post.id,
@@ -40,6 +42,32 @@ def _post_to_dict(post, author, db=None, viewer_id=None):
             "verified": is_badge_verified(author),
         },
     }
+
+
+def _serialize_posts(db, posts, authors, viewer_id=None):
+    if not posts:
+        return []
+    ids = [p.id for p in posts]
+    like_counts = dict(
+        db.query(models.PostLike.post_id, func.count(models.PostLike.id))
+        .filter(models.PostLike.post_id.in_(ids)).group_by(models.PostLike.post_id).all()
+    )
+    comment_counts = dict(
+        db.query(models.PostComment.post_id, func.count(models.PostComment.id))
+        .filter(models.PostComment.post_id.in_(ids)).group_by(models.PostComment.post_id).all()
+    )
+    liked = set()
+    if viewer_id:
+        liked = {
+            r[0] for r in db.query(models.PostLike.post_id)
+            .filter(models.PostLike.post_id.in_(ids), models.PostLike.user_id == viewer_id).all()
+        }
+    out = []
+    for p in posts:
+        a = authors.get(p.author_id)
+        if a:
+            out.append(_post_to_dict(p, a, counts=(like_counts.get(p.id, 0), comment_counts.get(p.id, 0), p.id in liked)))
+    return out
 
 
 @network_bp.post("/follow/<int:user_id>")
@@ -174,26 +202,25 @@ def delete_post(post_id):
 @require_auth
 def get_network_feed():
     db = g.db
-    me = g.current_user
+    me_id = g.current_user.id
+    viewer_categories = set(g.current_user.categories or [])
     limit = min(int(request.args.get("limit", 20)), 50)
     offset = int(request.args.get("offset", 0))
 
     followed_ids = {
         row.followed_id
-        for row in db.query(models.Follow.followed_id).filter(models.Follow.follower_id == me.id).all()
+        for row in db.query(models.Follow.followed_id).filter(models.Follow.follower_id == me_id).all()
     }
-    viewer_categories = set(me.categories or [])
 
-    total = db.query(models.Post).count()
-    candidates = (
-        db.query(models.Post)
-        .order_by(models.Post.created_at.desc())
-        .limit(300)
-        .all()
-    )
+    total = db.query(func.count(models.Post.id)).scalar() or 0
+    candidates = db.query(models.Post).order_by(models.Post.created_at.desc()).limit(300).all()
+    author_ids = {p.author_id for p in candidates}
+    authors = {
+        u.id: u for u in db.query(models.User).filter(models.User.id.in_(author_ids)).all()
+    } if author_ids else {}
 
     def score(post):
-        author = db.query(models.User).filter(models.User.id == post.author_id).first()
+        author = authors.get(post.author_id)
         if not author:
             return (-1, post.created_at)
         is_followed = author.id in followed_ids
@@ -208,14 +235,7 @@ def get_network_feed():
 
     scored = sorted(candidates, key=score, reverse=True)
     page = scored[offset:offset + limit]
-
-    results = []
-    for post in page:
-        author = db.query(models.User).filter(models.User.id == post.author_id).first()
-        if author:
-            results.append(_post_to_dict(post, author, db=db, viewer_id=me.id))
-
-    return jsonify({"posts": results, "total": total})
+    return jsonify({"posts": _serialize_posts(db, page, authors, me_id), "total": total})
 
 
 @network_bp.get("/who-to-follow")
@@ -371,6 +391,6 @@ def get_user_posts(username):
             .limit(50)
             .all()
         )
-        return jsonify({"posts": [_post_to_dict(p, author, db=db) for p in rows]})
+        return jsonify({"posts": _serialize_posts(db, rows, {author.id: author}, None)})
     finally:
         db.close()

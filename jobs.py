@@ -5,32 +5,28 @@ from datetime import datetime, timedelta
 from database import SessionLocal
 import models
 
-CHECK_INTERVAL_SECONDS = 600  # 10 minutes
+CHECK_INTERVAL_SECONDS = 600
 STALE_LISTING_DAYS = 90
 
 
 def expire_requests(db):
-    now = datetime.utcnow()
-    stale = (
+    n = (
         db.query(models.Listing)
         .filter(
             models.Listing.kind == "request",
             models.Listing.status == "active",
             models.Listing.deadline.isnot(None),
-            models.Listing.deadline < now,
+            models.Listing.deadline < datetime.utcnow(),
         )
-        .all()
+        .update({"status": "expired"}, synchronize_session=False)
     )
-    for listing in stale:
-        listing.status = "expired"
-    if stale:
-        db.commit()
-    return len(stale)
+    db.commit()
+    return n
 
 
 def expire_stale_listings(db):
     cutoff = datetime.utcnow() - timedelta(days=STALE_LISTING_DAYS)
-    stale = (
+    n = (
         db.query(models.Listing)
         .filter(
             models.Listing.kind.in_(["gig", "product"]),
@@ -38,31 +34,24 @@ def expire_stale_listings(db):
             models.Listing.created_at < cutoff,
             models.Listing.sold_at.is_(None),
         )
-        .all()
+        .update({"status": "expired"}, synchronize_session=False)
     )
-    for listing in stale:
-        listing.status = "expired"
-    if stale:
-        db.commit()
-    return len(stale)
+    db.commit()
+    return n
 
 
 def downgrade_expired_premium(db):
-    now = datetime.utcnow()
-    expired = (
+    n = (
         db.query(models.User)
         .filter(
             models.User.is_premium.is_(True),
             models.User.premium_expires.isnot(None),
-            models.User.premium_expires < now,
+            models.User.premium_expires < datetime.utcnow(),
         )
-        .all()
+        .update({"is_premium": False}, synchronize_session=False)
     )
-    for user in expired:
-        user.is_premium = False
-    if expired:
-        db.commit()
-    return len(expired)
+    db.commit()
+    return n
 
 
 def _run_loop():
@@ -83,5 +72,4 @@ def _run_loop():
 
 
 def start_job_scheduler():
-    thread = threading.Thread(target=_run_loop, daemon=True)
-    thread.start()
+    threading.Thread(target=_run_loop, daemon=True).start()

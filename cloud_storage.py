@@ -10,5 +10,9 @@ cloudinary.config(
 
 
 def upload_image(file_storage, folder):
-    result = cloudinary.uploader.upload(file_storage, folder=folder)
+    result = cloudinary.uploader.upload(
+        file_storage,
+        folder=folder,
+        transformation=[{"width": 1600, "crop": "limit", "quality": "auto:good"}],
+    )
     return result["secure_url"]

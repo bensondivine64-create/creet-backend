@@ -59,9 +59,11 @@ def get_listings():
         total = query.count()
         rows = query.order_by(models.Listing.created_at.desc()).offset(offset).limit(limit).all()
 
+        seller_ids = {r.seller_id for r in rows}
+        sellers = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(seller_ids)).all()} if seller_ids else {}
         results = []
         for row in rows:
-            seller = db.query(models.User).filter(models.User.id == row.seller_id).first()
+            seller = sellers.get(row.seller_id)
             if seller:
                 results.append(listing_to_dict(row, seller, viewer_country=viewer_country))
 
@@ -140,9 +142,11 @@ def get_personalized_feed():
     scored = sorted(candidates, key=lambda l: (score(l), l.created_at), reverse=True)
     top = scored[:limit]
 
+    seller_ids = {r.seller_id for r in top}
+    sellers = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(seller_ids)).all()} if seller_ids else {}
     results = []
     for row in top:
-        seller = db.query(models.User).filter(models.User.id == row.seller_id).first()
+        seller = sellers.get(row.seller_id)
         if not seller:
             continue
         d = listing_to_dict(row, seller)

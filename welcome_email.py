@@ -73,29 +73,40 @@ def _run_loop():
             db = SessionLocal()
             try:
                 now = datetime.utcnow()
-                candidates = (
-                    db.query(models.User)
+                ids = [
+                    r.id
+                    for r in db.query(models.User.id)
                     .filter(
                         models.User.welcome_email_sent.is_(False),
                         models.User.created_at <= now - timedelta(minutes=MIN_AGE_MINUTES),
                     )
+                    .limit(25)
                     .all()
-                )
-                print(f"[WELCOME EMAIL] checking {len(candidates)} candidate(s)")
-                for user in candidates:
+                ]
+                for uid in ids:
+                    claimed = (
+                        db.query(models.User)
+                        .filter(models.User.id == uid, models.User.welcome_email_sent.is_(False))
+                        .update({"welcome_email_sent": True}, synchronize_session=False)
+                    )
+                    db.commit()
+                    if not claimed:
+                        continue
+                    user = db.query(models.User).filter(models.User.id == uid).first()
                     try:
                         _send_welcome_email(user)
                     except Exception as e:
-                        print(f"[WELCOME EMAIL ERROR] user {user.id}: {e}")
-                        continue
-                    user.welcome_email_sent = True
-                    db.commit()
+                        print(f"[WELCOME EMAIL ERROR] user {uid}: {e}")
+                        db.query(models.User).filter(models.User.id == uid).update(
+                            {"welcome_email_sent": False}, synchronize_session=False
+                        )
+                        db.commit()
+                    time.sleep(0.6)
             finally:
                 db.close()
         except Exception as e:
             print(f"[WELCOME EMAIL LOOP ERROR] {e}")
         time.sleep(CHECK_INTERVAL_SECONDS)
-
 
 def start_welcome_email_scheduler():
     thread = threading.Thread(target=_run_loop, daemon=True)

@@ -2,6 +2,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
 import models
+from sqlalchemy import func, or_, case
 from serializers import is_badge_verified, presence_for
 from database import SessionLocal
 from auth import require_auth
@@ -37,67 +38,89 @@ def set_my_last_read(conv, my_id, when):
 def get_conversations():
     limit = min(int(request.args.get("limit", 30)), 50)
     offset = int(request.args.get("offset", 0))
-    db = SessionLocal()
-    try:
-        me = g.current_user.id
-        base_query = db.query(models.Conversation).filter(
-            (models.Conversation.user_a_id == me) | (models.Conversation.user_b_id == me)
-        )
-        total = base_query.count()
-        rows = (
-            base_query
-            .order_by(models.Conversation.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
-        results = []
-        for conv in rows:
-            other = db.query(models.User).filter(models.User.id == other_user_id(conv, me)).first()
-            if not other:
-                continue
-            last_msg = (
-                db.query(models.Message)
-                .filter(models.Message.conversation_id == conv.id)
-                .order_by(models.Message.created_at.desc())
-                .first()
-            )
-            listing_title = None
-            if conv.listing_id:
-                listing = db.query(models.Listing).filter(models.Listing.id == conv.listing_id).first()
-                if listing:
-                    listing_title = listing.title
-            last_read = my_last_read(conv, me)
-            unread_query = db.query(models.Message).filter(
-                models.Message.conversation_id == conv.id,
-                models.Message.sender_id != me,
-            )
-            if last_read:
-                unread_query = unread_query.filter(models.Message.created_at > last_read)
-            unread_count = unread_query.count()
+    db = g.db
+    me = g.current_user.id
 
-            last_message_preview = last_msg.content if (last_msg and last_msg.content) else (
-                "📷 Photo" if (last_msg and last_msg.image_url) else ""
-            )
+    base_query = db.query(models.Conversation).filter(
+        or_(models.Conversation.user_a_id == me, models.Conversation.user_b_id == me)
+    )
+    total = base_query.count()
+    rows = (
+        base_query.order_by(models.Conversation.created_at.desc())
+        .offset(offset).limit(limit).all()
+    )
+    if not rows:
+        return jsonify({"conversations": [], "total": total})
 
-            results.append({
-                "id": conv.id,
-                "participant": {
-                    "username": other.username,
-                    "full_name": other.full_name,
-                    "avatar": other.avatar,
-                    "verified": is_badge_verified(other),
-                    **presence_for(other),
-                },
-                "listing_id": conv.listing_id,
-                "listing_title": listing_title,
-                "last_message": last_message_preview,
-                "last_message_at": last_msg.created_at.isoformat() if last_msg and last_msg.created_at else conv.created_at.isoformat(),
-                "unread_count": unread_count,
-            })
-        return jsonify({"conversations": results, "total": total})
-    finally:
-        db.close()
+    conv_ids = [c.id for c in rows]
+    other_ids = {other_user_id(c, me) for c in rows}
+    listing_ids = {c.listing_id for c in rows if c.listing_id}
+
+    others = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(other_ids)).all()}
+
+    last_ids = [
+        r[0] for r in db.query(func.max(models.Message.id))
+        .filter(models.Message.conversation_id.in_(conv_ids))
+        .group_by(models.Message.conversation_id).all()
+    ]
+    last_msgs = {}
+    if last_ids:
+        for m in db.query(models.Message).filter(models.Message.id.in_(last_ids)).all():
+            last_msgs[m.conversation_id] = m
+
+    titles = {}
+    if listing_ids:
+        titles = {
+            lid: t for lid, t in db.query(models.Listing.id, models.Listing.title)
+            .filter(models.Listing.id.in_(listing_ids)).all()
+        }
+
+    last_read_col = case(
+        (models.Conversation.user_a_id == me, models.Conversation.user_a_last_read),
+        else_=models.Conversation.user_b_last_read,
+    )
+    unread_rows = (
+        db.query(models.Message.conversation_id, func.count(models.Message.id))
+        .join(models.Conversation, models.Conversation.id == models.Message.conversation_id)
+        .filter(
+            models.Message.conversation_id.in_(conv_ids),
+            models.Message.sender_id != me,
+            or_(last_read_col.is_(None), models.Message.created_at > last_read_col),
+        )
+        .group_by(models.Message.conversation_id).all()
+    )
+    unread = {cid: n for cid, n in unread_rows}
+
+    results = []
+    for conv in rows:
+        other = others.get(other_user_id(conv, me))
+        if not other:
+            continue
+        last_msg = last_msgs.get(conv.id)
+        preview = last_msg.content if (last_msg and last_msg.content) else (
+            "📷 Photo" if (last_msg and last_msg.image_url) else ""
+        )
+        if last_msg and last_msg.created_at:
+            last_at = last_msg.created_at.isoformat()
+        else:
+            last_at = conv.created_at.isoformat() if conv.created_at else None
+        results.append({
+            "id": conv.id,
+            "participant": {
+                "username": other.username,
+                "full_name": other.full_name,
+                "avatar": other.avatar,
+                "verified": is_badge_verified(other),
+                **presence_for(other),
+            },
+            "listing_id": conv.listing_id,
+            "listing_title": titles.get(conv.listing_id),
+            "last_message": preview,
+            "last_message_at": last_at,
+            "unread_count": unread.get(conv.id, 0),
+        })
+    results.sort(key=lambda r: r["last_message_at"] or "", reverse=True)
+    return jsonify({"conversations": results, "total": total})
 
 
 @messages_bp.post("")
@@ -153,48 +176,47 @@ def start_conversation():
 @messages_bp.get("/<int:conv_id>/messages")
 @require_auth
 def get_messages(conv_id):
-    db = SessionLocal()
-    try:
-        conv = db.query(models.Conversation).filter(models.Conversation.id == conv_id).first()
-        if not conv or g.current_user.id not in (conv.user_a_id, conv.user_b_id):
-            return jsonify({"detail": "Conversation not found"}), 404
+    db = g.db
+    my_id = g.current_user.id
+    conv = db.query(models.Conversation).filter(models.Conversation.id == conv_id).first()
+    if not conv or my_id not in (conv.user_a_id, conv.user_b_id):
+        return jsonify({"detail": "Conversation not found"}), 404
 
-        set_my_last_read(conv, g.current_user.id, datetime.utcnow())
-        db.commit()
+    set_my_last_read(conv, my_id, datetime.utcnow())
+    db.commit()
 
-        other = db.query(models.User).filter(models.User.id == other_user_id(conv, g.current_user.id)).first()
+    users = {
+        u.id: u for u in db.query(models.User)
+        .filter(models.User.id.in_([conv.user_a_id, conv.user_b_id])).all()
+    }
+    other = users.get(other_user_id(conv, my_id))
 
-        rows = (
-            db.query(models.Message)
-            .filter(models.Message.conversation_id == conv_id)
-            .order_by(models.Message.created_at.asc())
-            .all()
-        )
-        results = []
-        for m in rows:
-            sender = db.query(models.User).filter(models.User.id == m.sender_id).first()
-            results.append({
-                "id": m.id,
-                "conversation_id": m.conversation_id,
-                "sender_username": sender.username if sender else "",
-                "content": m.content or "",
-                "image_url": m.image_url,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
-            })
+    limit = min(int(request.args.get("limit", 200)), 500)
+    rows = (
+        db.query(models.Message)
+        .filter(models.Message.conversation_id == conv_id)
+        .order_by(models.Message.id.desc()).limit(limit).all()
+    )
+    rows.reverse()
+    results = [{
+        "id": m.id,
+        "conversation_id": m.conversation_id,
+        "sender_username": users[m.sender_id].username if m.sender_id in users else "",
+        "content": m.content or "",
+        "image_url": m.image_url,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+    } for m in rows]
 
-        participant = None
-        if other:
-            participant = {
-                "username": other.username,
-                "full_name": other.full_name,
-                "avatar": other.avatar,
-                "verified": is_badge_verified(other),
-                **presence_for(other),
-            }
-
-        return jsonify({"messages": results, "participant": participant})
-    finally:
-        db.close()
+    participant = None
+    if other:
+        participant = {
+            "username": other.username,
+            "full_name": other.full_name,
+            "avatar": other.avatar,
+            "verified": is_badge_verified(other),
+            **presence_for(other),
+        }
+    return jsonify({"messages": results, "participant": participant})
 
 
 @messages_bp.post("/<int:conv_id>/messages")

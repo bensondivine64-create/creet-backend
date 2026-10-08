@@ -1,4 +1,5 @@
 import os
+import time
 import re
 import hashlib
 import secrets
@@ -17,6 +18,17 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_DAYS = 7
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+_country_attempts = {}
+
+
+def _should_try_country(user_id):
+    now = time.time()
+    if now - _country_attempts.get(user_id, 0) < 3600:
+        return False
+    _country_attempts[user_id] = now
+    return True
 
 
 def hash_password(password: str) -> str:
@@ -80,7 +92,7 @@ def require_auth(fn):
             user = db.query(models.User).filter(models.User.id == int(payload["sub"])).first()
             if not user:
                 return jsonify({"detail": "Account not found"}), 401
-            if not user.country:
+            if not user.country and _should_try_country(user.id):
                 try:
                     from geolocation import get_client_country
                     detected = get_client_country()
