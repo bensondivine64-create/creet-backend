@@ -6,7 +6,7 @@ from database import SessionLocal
 from auth import require_auth
 from serializers import is_badge_verified
 from routers_blocks import is_blocked_either_way
-from cloud_storage import upload_image
+from cloud_storage import upload_image, upload_video
 
 network_bp = Blueprint("network", __name__, url_prefix="/api")
 
@@ -30,6 +30,7 @@ def _post_to_dict(post, author, db=None, viewer_id=None, counts=None):
         "id": post.id,
         "content": post.content,
         "image_url": post.image_url,
+        "video_url": getattr(post, "video_url", None),
         "created_at": post.created_at.isoformat() if post.created_at else None,
         "like_count": like_count,
         "comment_count": comment_count,
@@ -99,6 +100,7 @@ def follow_user(user_id):
 
     follow = models.Follow(follower_id=me.id, followed_id=user_id)
     db.add(follow)
+    db.add(models.Notification(user_id=user_id, type="system", title="New follower", body=f"{me.full_name} started following you", link=f"/u/{me.username}", actor_id=me.id))
     db.commit()
     return jsonify({"success": True, "following": True})
 
@@ -158,6 +160,25 @@ def upload_post_image():
     return jsonify({"url": url})
 
 
+ALLOWED_POST_VIDEO_EXTENSIONS = {"mp4", "webm", "mov"}
+MAX_POST_VIDEO_BYTES = 30 * 1024 * 1024
+
+
+@network_bp.post("/posts/upload-video")
+@require_auth
+def upload_post_video():
+    f = request.files.get("video")
+    if not f or not f.filename:
+        return jsonify({"detail": "No video provided"}), 422
+    ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    if ext not in ALLOWED_POST_VIDEO_EXTENSIONS:
+        return jsonify({"detail": "Allowed formats: mp4, webm, mov"}), 422
+    if request.content_length and request.content_length > MAX_POST_VIDEO_BYTES + 1024 * 1024:
+        return jsonify({"detail": "Video must be under 30MB"}), 413
+    url = upload_video(f, folder="creet/posts")
+    return jsonify({"url": url})
+
+
 @network_bp.post("/posts")
 @require_auth
 def create_post():
@@ -172,8 +193,9 @@ def create_post():
         return jsonify({"detail": "Post is too long"}), 422
 
     image_url = data.get("image_url") or None
+    video_url = data.get("video_url") or None
 
-    post = models.Post(author_id=me.id, content=content, image_url=image_url)
+    post = models.Post(author_id=me.id, content=content, image_url=image_url, video_url=video_url)
     db.add(post)
     db.commit()
     db.refresh(post)
@@ -236,6 +258,49 @@ def get_network_feed():
     scored = sorted(candidates, key=score, reverse=True)
     page = scored[offset:offset + limit]
     return jsonify({"posts": _serialize_posts(db, page, authors, me_id), "total": total})
+
+
+@network_bp.get("/people/search")
+@require_auth
+def search_people():
+    from sqlalchemy import or_
+    db = g.db
+    me = g.current_user
+    q = (request.args.get("q") or "").strip()[:60]
+    role = request.args.get("role") or ""
+    limit = min(int(request.args.get("limit", 20)), 40)
+
+    blocked = set()
+    for b in db.query(models.Block).filter(or_(models.Block.blocker_id == me.id, models.Block.blocked_id == me.id)).all():
+        blocked.add(b.blocked_id if b.blocker_id == me.id else b.blocker_id)
+
+    query = db.query(models.User).filter(
+        models.User.id != me.id,
+        models.User.profile_completed == True,  # noqa: E712
+    )
+    if blocked:
+        query = query.filter(models.User.id.notin_(blocked))
+    if role in ("freelancer", "vendor", "buyer"):
+        query = query.filter(models.User.role == role)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(
+            models.User.full_name.ilike(like),
+            models.User.username.ilike(like),
+            models.User.location.ilike(like),
+            models.User.short_bio.ilike(like),
+        ))
+    rows = query.order_by(models.User.is_verified.desc(), models.User.created_at.desc()).limit(limit).all()
+    return jsonify({"users": [{
+        "id": u.id,
+        "username": u.username,
+        "full_name": u.full_name,
+        "avatar": u.avatar,
+        "role": u.role,
+        "short_bio": u.short_bio,
+        "location": u.location,
+        "verified": is_badge_verified(u),
+    } for u in rows]})
 
 
 @network_bp.get("/who-to-follow")
@@ -370,6 +435,8 @@ def add_post_comment(post_id):
 
     comment = models.PostComment(post_id=post_id, author_id=me.id, content=content)
     db.add(comment)
+    if post.author_id != me.id:
+        db.add(models.Notification(user_id=post.author_id, type="reply", title="New comment", body=f'{me.full_name} commented: "{content[:80]}"', link="/feed", actor_id=me.id))
     db.commit()
     db.refresh(comment)
 

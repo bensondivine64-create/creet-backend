@@ -97,6 +97,7 @@ class Post(Base):
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     content = Column(Text, nullable=False)
     image_url = Column(String(500), nullable=True)
+    video_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
