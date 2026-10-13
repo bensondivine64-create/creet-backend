@@ -1,3 +1,4 @@
+import os
 from flask import Blueprint, request, jsonify, g
 
 import models
@@ -6,7 +7,7 @@ from database import SessionLocal
 from auth import require_auth
 from serializers import is_badge_verified
 from routers_blocks import is_blocked_either_way
-from cloud_storage import upload_image, upload_video
+from cloud_storage import upload_image, upload_video, upload_file
 
 network_bp = Blueprint("network", __name__, url_prefix="/api")
 
@@ -31,6 +32,8 @@ def _post_to_dict(post, author, db=None, viewer_id=None, counts=None):
         "content": post.content,
         "image_url": post.image_url,
         "video_url": getattr(post, "video_url", None),
+        "file_url": getattr(post, "file_url", None),
+        "file_name": getattr(post, "file_name", None),
         "created_at": post.created_at.isoformat() if post.created_at else None,
         "like_count": like_count,
         "comment_count": comment_count,
@@ -179,6 +182,26 @@ def upload_post_video():
     return jsonify({"url": url})
 
 
+ALLOWED_POST_FILE_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "zip"}
+MAX_POST_FILE_BYTES = 15 * 1024 * 1024
+
+
+@network_bp.post("/posts/upload-file")
+@require_auth
+def upload_post_file():
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"detail": "No file provided"}), 422
+    name = os.path.basename(f.filename)
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext not in ALLOWED_POST_FILE_EXTENSIONS:
+        return jsonify({"detail": "Allowed files: PDF, Word, Excel, PowerPoint, TXT, CSV, ZIP"}), 422
+    if request.content_length and request.content_length > MAX_POST_FILE_BYTES + 1024 * 1024:
+        return jsonify({"detail": "File must be under 15MB"}), 413
+    url = upload_file(f, folder="creet/files")
+    return jsonify({"url": url, "name": name[:200]})
+
+
 @network_bp.post("/posts")
 @require_auth
 def create_post():
@@ -194,8 +217,10 @@ def create_post():
 
     image_url = data.get("image_url") or None
     video_url = data.get("video_url") or None
+    file_url = data.get("file_url") or None
+    file_name = (data.get("file_name") or "")[:255] or None
 
-    post = models.Post(author_id=me.id, content=content, image_url=image_url, video_url=video_url)
+    post = models.Post(author_id=me.id, content=content, image_url=image_url, video_url=video_url, file_url=file_url, file_name=file_name)
     db.add(post)
     db.commit()
     db.refresh(post)
