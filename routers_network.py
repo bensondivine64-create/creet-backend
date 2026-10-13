@@ -1,7 +1,8 @@
 import os
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, send_from_directory
 
 import models
+from file_storage import save_upload, uploads_dir
 from sqlalchemy import func
 from database import SessionLocal
 from auth import require_auth
@@ -186,6 +187,19 @@ ALLOWED_POST_FILE_EXTENSIONS = {"pdf", "doc", "docx", "xls", "xlsx", "ppt", "ppt
 MAX_POST_FILE_BYTES = 15 * 1024 * 1024
 
 
+@network_bp.get("/files/<path:filename>")
+def serve_file(filename):
+    resp = send_from_directory(
+        uploads_dir(),
+        filename,
+        as_attachment=not filename.lower().endswith(".pdf"),
+        download_name=filename.split("_", 1)[-1],
+    )
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
 @network_bp.post("/posts/upload-file")
 @require_auth
 def upload_post_file():
@@ -198,7 +212,11 @@ def upload_post_file():
         return jsonify({"detail": "Allowed files: PDF, Word, Excel, PowerPoint, TXT, CSV, ZIP"}), 422
     if request.content_length and request.content_length > MAX_POST_FILE_BYTES + 1024 * 1024:
         return jsonify({"detail": "File must be under 15MB"}), 413
-    url = upload_file(f, folder="creet/files")
+    try:
+        stored = save_upload(f, name)
+    except ValueError as e:
+        return jsonify({"detail": str(e)}), 413
+    url = f"/api/files/{stored}"
     return jsonify({"url": url, "name": name[:200]})
 
 
@@ -218,6 +236,8 @@ def create_post():
     image_url = data.get("image_url") or None
     video_url = data.get("video_url") or None
     file_url = data.get("file_url") or None
+    if file_url and not (file_url.startswith("/api/files/") or file_url.startswith("https://res.cloudinary.com/")):
+        file_url = None
     file_name = (data.get("file_name") or "")[:255] or None
 
     post = models.Post(author_id=me.id, content=content, image_url=image_url, video_url=video_url, file_url=file_url, file_name=file_name)
