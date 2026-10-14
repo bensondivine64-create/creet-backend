@@ -49,6 +49,13 @@ def ask_support_ai(user_message, context, history_text):
     if not reply:
         return None, False
 
+    # This model sometimes prefixes its real answer with internal reasoning,
+    # separated by a "---" line. Only the part after it is meant for the user.
+    if "---" in reply:
+        reply = reply.split("---", 1)[1].strip()
+    if not reply:
+        return None, False
+
     lowered = reply.lower()
     for marker in REFUSAL_MARKERS:
         if marker.lower() in lowered:

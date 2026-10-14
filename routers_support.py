@@ -229,6 +229,17 @@ def send_message():
         _save_message(db, convo.id, "system", reply)
         return jsonify({"conversation_id": convo.id, "status": "human", "reply": reply, "ticket_id": ticket.id})
 
+    # Small talk / greetings don't need knowledge-base lookup — answer directly
+    # and briefly, then invite the real question.
+    GREETING_WORDS = {"hi", "hello", "hey", "yo", "sup", "good morning", "good afternoon",
+                       "good evening", "thanks", "thank you", "ok", "okay"}
+    if text.lower().strip(" !.") in GREETING_WORDS:
+        reply = "Hi! I'm CREET Support — what can I help you with today?"
+        convo.unresolved_count = 0
+        db.commit()
+        _save_message(db, convo.id, "ai", reply)
+        return jsonify({"conversation_id": convo.id, "status": "ai", "reply": reply})
+
     # Normal AI path: retrieve knowledge base context, ask the AI, honestly report
     # low confidence rather than guessing.
     articles = _search_knowledge_base(db, text)
