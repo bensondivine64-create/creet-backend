@@ -123,6 +123,28 @@ def get_conversations():
     return jsonify({"conversations": results, "total": total})
 
 
+@messages_bp.get("/unread-count")
+@require_auth
+def unread_count():
+    db = g.db
+    me = g.current_user.id
+    last_read_col = case(
+        (models.Conversation.user_a_id == me, models.Conversation.user_a_last_read),
+        else_=models.Conversation.user_b_last_read,
+    )
+    n = (
+        db.query(func.count(models.Message.id))
+        .join(models.Conversation, models.Conversation.id == models.Message.conversation_id)
+        .filter(
+            or_(models.Conversation.user_a_id == me, models.Conversation.user_b_id == me),
+            models.Message.sender_id != me,
+            or_(last_read_col.is_(None), models.Message.created_at > last_read_col),
+        )
+        .scalar()
+    ) or 0
+    return jsonify({"count": int(n)})
+
+
 @messages_bp.post("")
 @require_auth
 def start_conversation():
